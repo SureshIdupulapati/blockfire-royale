@@ -257,20 +257,37 @@ export class RoomManager {
 
     const safeId = roomId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
 
+    const peerOptions = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun.cloudflare.com:3478' }
+        ]
+      }
+    };
+
     try {
       if (this.isHost) {
         const hostPeerId = `bf-${safeId}-host`;
-        this.peer = new Peer(hostPeerId);
+        this.peer = new Peer(hostPeerId, peerOptions);
 
         this.peer.on('connection', (conn) => {
           this.peerConnections.push(conn);
           this.updateConnectionStatus('🟢 FRIEND CONNECTED!');
 
-          conn.on('open', () => {
+          const sendRoomSync = () => {
             if (this.currentRoom) {
-              conn.send({ type: 'ROOM_SYNC', payload: this.currentRoom });
+              try { conn.send({ type: 'ROOM_SYNC', payload: this.currentRoom }); } catch {}
             }
-          });
+          };
+
+          if (conn.open) {
+            sendRoomSync();
+          } else {
+            conn.on('open', sendRoomSync);
+          }
 
           conn.on('data', (data) => {
             this.handleNetworkMessage(data);
@@ -286,24 +303,32 @@ export class RoomManager {
           console.warn('PeerJS host info:', err);
         });
       } else {
-        this.peer = new Peer();
+        this.peer = new Peer(peerOptions);
 
         this.peer.on('open', () => {
           const hostPeerId = `bf-${safeId}-host`;
           const conn = this.peer!.connect(hostPeerId, { reliable: true });
           this.peerConnections.push(conn);
 
-          conn.on('open', () => {
+          const sendJoin = () => {
             this.updateConnectionStatus('🟢 CONNECTED TO HOST!');
-            conn.send({
-              type: 'PLAYER_JOIN_REQUEST',
-              roomId,
-              payload: {
-                name: 'Player 2 (Friend)',
-                preferredTeam: this.preferredTeam
-              }
-            });
-          });
+            try {
+              conn.send({
+                type: 'PLAYER_JOIN_REQUEST',
+                roomId,
+                payload: {
+                  name: 'Player 2 (Friend)',
+                  preferredTeam: this.preferredTeam
+                }
+              });
+            } catch {}
+          };
+
+          if (conn.open) {
+            sendJoin();
+          } else {
+            conn.on('open', sendJoin);
+          }
 
           conn.on('data', (data) => {
             this.handleNetworkMessage(data);

@@ -125,6 +125,11 @@ class GameApp {
       this.roomManager
     );
     this.remotePlayerManager.localPlayer = this.player;
+    this.remotePlayerManager.botManager = this.botManager;
+    this.remotePlayerManager.onLocalPlayerEliminated = () => {
+      this.player.vitals.health = 0;
+      this.checkMatchConditions();
+    };
 
     // Register weapon check for remote players too
     const baseWeaponFired = this.player.onWeaponFired;
@@ -306,11 +311,15 @@ class GameApp {
           if (startBtn) startBtn.innerText = 'DEPLOY INTO BATTLE ROYALE';
         } else if (mode === GameMode.DUEL_1V1) {
           if (roomPanel) roomPanel.classList.remove('hidden');
-          this.roomManager.createRoom(GameMode.DUEL_1V1);
+          if (!this.roomManager.currentRoom || this.roomManager.currentRoom.mode !== GameMode.DUEL_1V1) {
+            this.roomManager.createRoom(GameMode.DUEL_1V1);
+          }
           if (startBtn) startBtn.innerText = 'START 1v1 DUEL ARENA';
         } else if (mode === GameMode.CLASH_2V2) {
           if (roomPanel) roomPanel.classList.remove('hidden');
-          this.roomManager.createRoom(GameMode.CLASH_2V2);
+          if (!this.roomManager.currentRoom || this.roomManager.currentRoom.mode !== GameMode.CLASH_2V2) {
+            this.roomManager.createRoom(GameMode.CLASH_2V2);
+          }
           if (startBtn) startBtn.innerText = 'START 2v2 SQUAD CLASH';
         }
       });

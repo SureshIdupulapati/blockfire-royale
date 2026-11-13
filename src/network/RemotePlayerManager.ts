@@ -3,7 +3,8 @@ import { PlayerController } from '../player/PlayerController';
 import { RoomManager } from './RoomManager';
 import { SoundSynthesizer } from '../audio/SoundSynthesizer';
 import { ParticleManager } from '../combat/ParticleManager';
-import { WeaponConfig } from '../types';
+import { BotManager } from '../ai/BotManager';
+import { WeaponConfig, GameMode } from '../types';
 import { WEAPON_REGISTRY } from '../combat/WeaponTypes';
 
 export interface RemotePlayerState {
@@ -215,8 +216,25 @@ export class RemotePlayer {
     this.spriteTexture.needsUpdate = true;
   }
 
-  public takeHit(dmg: number, isHeadshot: boolean): void {
-    this.health = Math.max(0, this.health - dmg);
+  public takeHit(amount: number, isHeadshot: boolean): void {
+    let effectiveDmg = amount;
+
+    if (isHeadshot) {
+      effectiveDmg *= 1.5;
+    }
+
+    if (this.armor > 0) {
+      const absorb = effectiveDmg * 0.5;
+      if (this.armor >= absorb) {
+        this.armor -= absorb;
+        effectiveDmg -= absorb;
+      } else {
+        effectiveDmg -= this.armor;
+        this.armor = 0;
+      }
+    }
+
+    this.health = Math.max(0, this.health - effectiveDmg);
     this.hitFlashTimer = 0.18;
     this.flinchAmount = 0.25;
 
@@ -292,6 +310,8 @@ export class RemotePlayerManager {
 
   public peers: Map<number, RemotePlayer> = new Map();
   public localPlayer: PlayerController | null = null;
+  public botManager: BotManager | null = null;
+  public onLocalPlayerEliminated: ((killerTeam: string) => void) | null = null;
   private syncTimer: number = 0;
 
   constructor(
@@ -346,6 +366,32 @@ export class RemotePlayerManager {
     this.peers.clear();
   }
 
+  public broadcastLocalState(localPlayer: PlayerController): void {
+    if (!this.roomManager.currentRoom) return;
+
+    const myTeam = this.roomManager.isHost ? 'blue' : this.roomManager.preferredTeam;
+    const myName = this.roomManager.isHost ? 'Player 1 (Host)' : 'Player 2 (Friend)';
+    const activeWeapon = localPlayer.getActiveWeapon();
+
+    this.roomManager.sendNetworkMessage({
+      type: 'PLAYER_STATE',
+      slotId: this.roomManager.localPlayerSlot,
+      name: myName,
+      team: myTeam,
+      position: {
+        x: localPlayer.position.x,
+        y: localPlayer.position.y,
+        z: localPlayer.position.z
+      },
+      rotationY: localPlayer.yaw,
+      health: localPlayer.vitals.health,
+      armor: localPlayer.vitals.armor,
+      weaponId: activeWeapon?.id || 'm416',
+      isShooting: localPlayer.isShooting,
+      isAlive: localPlayer.vitals.health > 0
+    });
+  }
+
   private handlePeerMessage(data: any): void {
     if (data.type === 'PLAYER_STATE') {
       const state = data as RemotePlayerState;
@@ -373,10 +419,17 @@ export class RemotePlayerManager {
       }
     } else if (data.type === 'DAMAGE_EVENT') {
       // Check if this damage event was targeted at the local player
-      if (data.targetSlot === this.roomManager.localPlayerSlot && this.localPlayer) {
+      // In 1v1 duel, any incoming damage event from the remote player targets the local player
+      const isTargetingMe = (data.targetSlot === this.roomManager.localPlayerSlot) ||
+        (this.roomManager.currentRoom?.mode === GameMode.DUEL_1V1);
+
+      if (isTargetingMe && this.localPlayer) {
         this.localPlayer.applyDamage(data.damage, data.isHeadshot);
 
-        // If damage proved fatal to local player, broadcast elimination
+        // Immediately broadcast updated player state back so attacker sees true HP drop instantly
+        this.broadcastLocalState(this.localPlayer);
+
+        // If damage proved fatal to local player, broadcast elimination and trigger defeat
         if (this.localPlayer.vitals.health <= 0) {
           const myTeam = this.roomManager.isHost ? 'blue' : this.roomManager.preferredTeam;
           const enemyTeam = myTeam === 'blue' ? 'red' : 'blue';
@@ -385,9 +438,23 @@ export class RemotePlayerManager {
             slotId: this.roomManager.localPlayerSlot,
             killerTeam: enemyTeam
           });
+          if (this.onLocalPlayerEliminated) {
+            this.onLocalPlayerEliminated(enemyTeam);
+          }
         }
       }
     } else if (data.type === 'PLAYER_ELIMINATED') {
+      if (data.slotId === this.roomManager.localPlayerSlot) {
+        // Local player was eliminated by opponent!
+        if (this.localPlayer) {
+          this.localPlayer.vitals.health = 0;
+        }
+        if (this.onLocalPlayerEliminated) {
+          this.onLocalPlayerEliminated(data.killerTeam);
+        }
+        return;
+      }
+
       const peer = this.peers.get(data.slotId);
       if (peer) {
         peer.isAlive = false;
@@ -410,28 +477,7 @@ export class RemotePlayerManager {
       this.syncTimer += delta;
       if (this.syncTimer >= 0.05) {
         this.syncTimer = 0;
-
-        const myTeam = this.roomManager.isHost ? 'blue' : this.roomManager.preferredTeam;
-        const myName = this.roomManager.isHost ? 'Player 1 (Host)' : 'Player 2 (Friend)';
-        const activeWeapon = localPlayer.getActiveWeapon();
-
-        this.roomManager.sendNetworkMessage({
-          type: 'PLAYER_STATE',
-          slotId: this.roomManager.localPlayerSlot,
-          name: myName,
-          team: myTeam,
-          position: {
-            x: localPlayer.position.x,
-            y: localPlayer.position.y,
-            z: localPlayer.position.z
-          },
-          rotationY: localPlayer.yaw,
-          health: localPlayer.vitals.health,
-          armor: localPlayer.vitals.armor,
-          weaponId: activeWeapon?.id || 'm416',
-          isShooting: localPlayer.isShooting,
-          isAlive: localPlayer.vitals.health > 0
-        });
+        this.broadcastLocalState(localPlayer);
       }
     }
   }
@@ -492,6 +538,11 @@ export class RemotePlayerManager {
       const multiplier = isHeadshot ? weapon.headshotMultiplier : 1.0;
       const dmg = weapon.damage * multiplier;
 
+      // Track player damage stats for BOOYAH score
+      if (this.botManager) {
+        this.botManager.totalDamageDealt += dmg;
+      }
+
       // 5. Remote peer mesh damage reaction: red flash + flinch + overhead health bar update
       closestPeer.takeHit(dmg, isHeadshot);
 
@@ -507,6 +558,9 @@ export class RemotePlayerManager {
       if (closestPeer.health <= 0) {
         closestPeer.isAlive = false;
         closestPeer.mesh.visible = false;
+        if (this.botManager) {
+          this.botManager.playerKills++;
+        }
         const myTeam = this.roomManager.isHost ? 'blue' : this.roomManager.preferredTeam;
         this.roomManager.registerKill(myTeam);
 
@@ -520,6 +574,7 @@ export class RemotePlayerManager {
       // 8. Send damage event to remote player
       this.roomManager.sendNetworkMessage({
         type: 'DAMAGE_EVENT',
+        senderSlot: this.roomManager.localPlayerSlot,
         targetSlot: closestPeer.slotId,
         damage: dmg,
         isHeadshot

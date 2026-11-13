@@ -59,8 +59,9 @@ export class BotManager {
       this.totalParticipants = 2;
       this.aliveCount = 2;
 
-      const oppSlot = roomConfig?.slots.find(s => s.slotId === 1);
-      if (!oppSlot || !oppSlot.isHuman) {
+      // In a human vs human duel, never spawn a rival AI bot
+      const isMultiplayerDuel = roomConfig && roomConfig.slots.filter(s => s.isHuman).length >= 2;
+      if (!isMultiplayerDuel) {
         const rivalBot = new BotAI(
           'bot-duel',
           'Bot_Rival',
