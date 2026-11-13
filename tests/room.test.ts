@@ -77,6 +77,7 @@ describe('Custom Room & 1v1 / 2v2 Modes', () => {
     expect(link).toContain('https://');
     expect(link).toContain('github.io');
     expect(link).toContain(room.roomId);
+    expect(manager.getShortRoomCode()).toBe(room.roomId.replace('ROOM-', ''));
   });
 
   it('should route DAMAGE_EVENT and PLAYER_ELIMINATED through onRemotePlayerUpdate', () => {

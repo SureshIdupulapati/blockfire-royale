@@ -480,6 +480,10 @@ export class RoomManager {
     return `${proto}//${this.localIP}:3000/?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
   }
 
+  public getShortRoomCode(): string {
+    return this.currentRoom ? this.currentRoom.roomId.replace('ROOM-', '') : '';
+  }
+
   public registerKill(killerTeam: Team): { blueWins: boolean; redWins: boolean } {
     if (killerTeam === 'blue') {
       this.teamBlueScore++;

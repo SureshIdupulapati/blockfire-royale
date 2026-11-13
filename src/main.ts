@@ -212,28 +212,28 @@ class GameApp {
       this.startMatch();
     };
 
-    const copyLanBtn = document.getElementById('btn-copy-lan');
-    const copyWanBtn = document.getElementById('btn-copy-wan');
+    const copyLinkBtn = document.getElementById('btn-copy-link');
+    const copyCodeBtn = document.getElementById('btn-copy-code');
 
-    if (copyLanBtn) {
-      copyLanBtn.addEventListener('click', () => {
-        const link = this.roomManager.getLocalNetworkLink();
+    if (copyLinkBtn) {
+      copyLinkBtn.addEventListener('click', () => {
+        const link = this.roomManager.getInviteLink();
         navigator.clipboard.writeText(link).then(() => {
-          copyLanBtn.innerText = '✅ WI-FI LINK COPIED!';
+          copyLinkBtn.innerText = '✅ LINK COPIED!';
           setTimeout(() => {
-            copyLanBtn.innerText = '📋 COPY WI-FI LINK';
+            copyLinkBtn.innerText = '📋 COPY INVITE LINK';
           }, 2000);
         });
       });
     }
 
-    if (copyWanBtn) {
-      copyWanBtn.addEventListener('click', () => {
-        const link = this.roomManager.getPublicInternetLink();
-        navigator.clipboard.writeText(link).then(() => {
-          copyWanBtn.innerText = '✅ INTERNET LINK COPIED!';
+    if (copyCodeBtn) {
+      copyCodeBtn.addEventListener('click', () => {
+        const code = this.roomManager.getShortRoomCode();
+        navigator.clipboard.writeText(code).then(() => {
+          copyCodeBtn.innerText = '✅ CODE COPIED!';
           setTimeout(() => {
-            copyWanBtn.innerText = '📋 COPY INTERNET LINK';
+            copyCodeBtn.innerText = '🔢 COPY CODE';
           }, 2000);
         });
       });
@@ -244,10 +244,18 @@ class GameApp {
     const codeEl = document.getElementById('room-code-display');
     if (codeEl) codeEl.innerText = room.roomId;
 
-    const lanInput = document.getElementById('invite-lan-input') as HTMLInputElement | null;
-    const wanInput = document.getElementById('invite-wan-input') as HTMLInputElement | null;
-    if (lanInput) lanInput.value = this.roomManager.getLocalNetworkLink();
-    if (wanInput) wanInput.value = this.roomManager.getPublicInternetLink();
+    const codePill = document.getElementById('room-code-pill');
+    if (codePill) codePill.innerText = room.roomId;
+
+    const startBtn = document.getElementById('btn-start');
+    const hasFriend = room.slots.some(s => s.isHuman && !s.isHost);
+    if (startBtn && this.roomManager.isHost) {
+      if (room.mode === GameMode.DUEL_1V1) {
+        startBtn.innerText = hasFriend ? '⚔️ START 1v1 DUEL (WITH FRIEND)' : 'START 1v1 DUEL ARENA';
+      } else if (room.mode === GameMode.CLASH_2V2) {
+        startBtn.innerText = hasFriend ? '⚔️ START 2v2 CLASH (WITH FRIEND)' : 'START 2v2 SQUAD CLASH';
+      }
+    }
 
     const blueContainer = document.getElementById('blue-slots');
     const redContainer = document.getElementById('red-slots');
