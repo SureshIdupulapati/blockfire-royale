@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>BlockFire: Craft Royale (Minecraft x PUBG x Free Fire)</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700;800&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="game-container">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- CROSSHAIR & HITMARKER -->
+      <div id="crosshair-container">
+        <div id="crosshair" class="crosshair">
+          <div class="ch-line top"></div>
+          <div class="ch-line bottom"></div>
+          <div class="ch-line left"></div>
+          <div class="ch-line right"></div>
+          <div class="ch-dot"></div>
+        </div>
+        <div id="hitmarker" class="hitmarker hidden">
+          <div class="hm-diag hm-tl"></div>
+          <div class="hm-diag hm-tr"></div>
+          <div class="hm-diag hm-bl"></div>
+          <div class="hm-diag hm-br"></div>
+        </div>
+      </div>
+
+      <!-- FLOATING DAMAGE NUMBERS CONTAINER -->
+      <div id="damage-numbers-layer"></div>
+
+      <!-- HUD OVERLAY -->
+      <div id="hud" class="hud-overlay">
+        <!-- TOP COMPASS RIBBON -->
+        <div id="compass-wrapper">
+          <div class="compass-pointer">▼</div>
+          <div id="compass-strip" class="compass-strip"></div>
+          <div id="compass-degree">0° N</div>
+        </div>
+
+        <!-- TOP CENTER ZONE STATUS -->
+        <div id="zone-banner" class="zone-banner">
+          <div class="zone-icon">⚡</div>
+          <div class="zone-text-group">
+            <span id="zone-status-label" class="zone-label">SAFE ZONE EXPANDING</span>
+            <span id="zone-timer" class="zone-timer">02:30</span>
+          </div>
+          <div id="zone-warning" class="zone-warning hidden">OUTSIDE SAFE ZONE - TAKING DAMAGE!</div>
+        </div>
+
+        <!-- TOP RIGHT: RADAR / MINIMAP & MATCH STATS -->
+        <div id="top-right-panel">
+          <div class="match-counters">
+            <div class="counter-box alive-box">
+              <span class="counter-title">ALIVE</span>
+              <span id="alive-count" class="counter-val">15</span>
+            </div>
+            <div class="counter-box kill-box">
+              <span class="counter-title">KILLS</span>
+              <span id="kill-count" class="counter-val">0</span>
+            </div>
+          </div>
+
+          <div id="minimap-container">
+            <canvas id="minimap-canvas" width="160" height="160"></canvas>
+            <div class="minimap-border"></div>
+          </div>
+
+          <div id="kill-feed" class="kill-feed"></div>
+        </div>
+
+        <!-- PARACHUTE / AIR DROP DROP GAUGE -->
+        <div id="airdrop-gauge" class="airdrop-gauge hidden">
+          <div class="gauge-title">ALTITUDE</div>
+          <div class="gauge-bar-bg">
+            <div id="altitude-bar" class="gauge-bar-fill"></div>
+          </div>
+          <div id="altitude-val" class="gauge-val">150m</div>
+          <div id="parachute-prompt" class="parachute-prompt">PRESS [SPACE] TO DEPLOY PARACHUTE</div>
+        </div>
+
+        <!-- BOTTOM LEFT: HEALTH, ARMOR, SKILL -->
+        <div id="bottom-left-panel">
+          <!-- FREE FIRE CHARACTER SKILL -->
+          <div class="skill-container">
+            <div id="skill-btn" class="skill-btn">
+              <div class="skill-icon">🎶</div>
+              <div id="skill-cooldown-overlay" class="skill-cooldown"></div>
+              <span class="skill-key">[E]</span>
+            </div>
+            <div class="skill-info">
+              <span class="skill-name">DROP THE BEAT</span>
+              <span class="skill-desc">+25% SPEED & HEAL</span>
+            </div>
+          </div>
+
+          <!-- HEALTH & ARMOR BARS -->
+          <div class="vitals-group">
+            <div class="bar-row">
+              <span class="bar-icon vest-icon">🛡️</span>
+              <div class="bar-bg armor-bg">
+                <div id="armor-bar" class="bar-fill armor-fill" style="width: 100%;"></div>
+              </div>
+              <span id="armor-text" class="bar-text">100 / 100</span>
+            </div>
+            <div class="bar-row">
+              <span class="bar-icon hp-icon">❤️</span>
+              <div class="bar-bg hp-bg">
+                <div id="hp-bar" class="bar-fill hp-fill" style="width: 100%;"></div>
+              </div>
+              <span id="hp-text" class="bar-text">100 / 100</span>
+            </div>
+          </div>
+
+          <!-- MINECRAFT CRAFTING MATERIALS -->
+          <div class="resource-group">
+            <div class="res-item">
+              <span class="res-icon">🪵</span>
+              <span id="res-wood" class="res-val">120</span>
+            </div>
+            <div class="res-item">
+              <span class="res-icon">🧱</span>
+              <span id="res-stone" class="res-val">60</span>
+            </div>
+            <div class="res-item gloo-item">
+              <span class="res-icon">🧊</span>
+              <span id="res-gloo" class="res-val">3</span>
+              <span class="gloo-hint">[G] GLOO WALL</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- BOTTOM CENTER: HOTBAR -->
+        <div id="hotbar" class="hotbar">
+          <div class="slot active" data-slot="0">
+            <span class="slot-num">1</span>
+            <div class="slot-icon" id="slot-0-icon">🔫</div>
+            <div class="slot-name" id="slot-0-name">M416</div>
+            <div class="slot-sub" id="slot-0-sub">5.56mm</div>
+          </div>
+          <div class="slot" data-slot="1">
+            <span class="slot-num">2</span>
+            <div class="slot-icon" id="slot-1-icon">⚡</div>
+            <div class="slot-name" id="slot-1-name">MP40</div>
+            <div class="slot-sub" id="slot-1-sub">9mm</div>
+          </div>
+          <div class="slot" data-slot="2">
+            <span class="slot-num">3</span>
+            <div class="slot-icon" id="slot-2-icon">⛏️</div>
+            <div class="slot-name" id="slot-2-name">PICKAXE</div>
+            <div class="slot-sub" id="slot-2-sub">Harvest</div>
+          </div>
+          <div class="slot" data-slot="3">
+            <span class="slot-num">4</span>
+            <div class="slot-icon" id="slot-3-icon">🧊</div>
+            <div class="slot-name" id="slot-3-name">GLOO WALL</div>
+            <div class="slot-sub" id="slot-3-sub">Defense</div>
+          </div>
+          <div class="slot" data-slot="4">
+            <span class="slot-num">5</span>
+            <div class="slot-icon" id="slot-4-icon">💉</div>
+            <div class="slot-name" id="slot-4-name">MEDKIT</div>
+            <div class="slot-sub" id="slot-4-sub">+75 HP</div>
+          </div>
+        </div>
+
+        <!-- BOTTOM RIGHT: WEAPON HUD -->
+        <div id="bottom-right-panel">
+          <div class="weapon-hud">
+            <div class="weapon-header">
+              <span id="weapon-title" class="weapon-title">M416 ASSAULT RIFLE</span>
+              <span id="fire-mode" class="fire-mode">AUTO</span>
+            </div>
+            <div class="ammo-row">
+              <span id="ammo-cur" class="ammo-cur">30</span>
+              <span class="ammo-sep">/</span>
+              <span id="ammo-reserve" class="ammo-reserve">180</span>
+            </div>
+            <div id="reload-prompt" class="reload-prompt hidden">PRESS [R] TO RELOAD</div>
+          </div>
+        </div>
+
+        <!-- INTERACTION PROMPT -->
+        <div id="interaction-prompt" class="interaction-prompt hidden">
+          <span class="interact-key">[F]</span>
+          <span id="interact-text" class="interact-text">Pick up AWM</span>
+        </div>
+      </div>
+
+      <!-- LOBBY / START SCREEN -->
+      <div id="start-screen" class="screen-overlay">
+        <div class="menu-card">
+          <div class="game-logo">
+            <span class="logo-voxel">BLOCK</span><span class="logo-fire">FIRE</span>
+            <div class="logo-sub">CRAFT ROYALE</div>
+          </div>
+          <div class="flavor-tagline">
+            Minecraft Voxel World &times; PUBG Tactical Shrinking Zone &times; Free Fire Gloo Walls & Skills
+          </div>
+
+          <div class="features-summary">
+            <div class="feat-badge">⛏️ Mine & Build Voxel Cover</div>
+            <div class="feat-badge">🧊 Free Fire Gloo Wall Deploy</div>
+            <div class="feat-badge">⚡ PUBG Electric Shrinking Zone</div>
+            <div class="feat-badge">🪂 Airborne Parachute Deployment</div>
+            <div class="feat-badge">🤖 Tactical AI Bot Combatants</div>
+            <div class="feat-badge">🏆 BOOYAH! #1 Victory Finale</div>
+          </div>
+
+          <div class="controls-guide">
+            <div class="guide-col">
+              <span class="guide-item"><b>WASD</b> : Move</span>
+              <span class="guide-item"><b>MOUSE</b> : Aim & Look</span>
+              <span class="guide-item"><b>LEFT CLICK</b> : Shoot / Mine / Build</span>
+              <span class="guide-item"><b>RIGHT CLICK</b> : Aim Down Sight (ADS)</span>
+            </div>
+            <div class="guide-col">
+              <span class="guide-item"><b>1-5 / SCROLL</b> : Hotbar Slots</span>
+              <span class="guide-item"><b>R</b> : Reload Weapon</span>
+              <span class="guide-item"><b>E</b> : Skill (Drop The Beat)</span>
+              <span class="guide-item"><b>G</b> : Deploy Gloo Wall</span>
+              <span class="guide-item"><b>V</b> : Toggle 1st / 3rd Person</span>
+              <span class="guide-item"><b>SHIFT / SPACE</b> : Sprint / Jump</span>
+            </div>
+          </div>
+
+          <button id="btn-start" class="btn-primary">DEPLOY INTO BATTLE ROYALE</button>
+        </div>
+      </div>
+
+      <!-- BOOYAH VICTORY SCREEN -->
+      <div id="booyah-screen" class="screen-overlay hidden">
+        <div class="victory-card">
+          <div class="booyah-banner">BOOYAH!</div>
+          <div class="booyah-sub">#1 WINNER WINNER CHICKEN DINNER</div>
+
+          <div class="match-stats-grid">
+            <div class="stat-cell">
+              <span class="sc-title">KILLS</span>
+              <span id="win-kills" class="sc-val">8</span>
+            </div>
+            <div class="stat-cell">
+              <span class="sc-title">DAMAGE DEALT</span>
+              <span id="win-dmg" class="sc-val">1420</span>
+            </div>
+            <div class="stat-cell">
+              <span class="sc-title">SURVIVAL TIME</span>
+              <span id="win-time" class="sc-val">04:12</span>
+            </div>
+            <div class="stat-cell">
+              <span class="sc-title">BLOCKS PLACED</span>
+              <span id="win-blocks" class="sc-val">24</span>
+            </div>
+          </div>
+
+          <button id="btn-restart-win" class="btn-primary">PLAY AGAIN</button>
+        </div>
+      </div>
+
+      <!-- GAME OVER SCREEN -->
+      <div id="defeat-screen" class="screen-overlay hidden">
+        <div class="defeat-card">
+          <div class="defeat-banner">ELIMINATED</div>
+          <div id="defeat-rank" class="defeat-sub">RANK #7 / 15</div>
+
+          <div class="match-stats-grid">
+            <div class="stat-cell">
+              <span class="sc-title">KILLS</span>
+              <span id="lose-kills" class="sc-val">2</span>
+            </div>
+            <div class="stat-cell">
+              <span class="sc-title">DAMAGE</span>
+              <span id="lose-dmg" class="sc-val">380</span>
+            </div>
+            <div class="stat-cell">
+              <span class="sc-title">KILLED BY</span>
+              <span id="lose-killer" class="sc-val">Bot_Ghost</span>
+            </div>
+          </div>
+
+          <button id="btn-restart-lose" class="btn-primary">REDEPLOY</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
