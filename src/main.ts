@@ -12,6 +12,7 @@ import { AirDropManager } from './airdrop/AirDropManager';
 import { BotManager } from './ai/BotManager';
 import { UIManager } from './ui/UIManager';
 import { RoomManager } from './network/RoomManager';
+import { RemotePlayerManager } from './network/RemotePlayerManager';
 
 class GameApp {
   private canvas: HTMLCanvasElement;
@@ -31,6 +32,7 @@ class GameApp {
   private botManager: BotManager;
   private uiManager: UIManager;
   private roomManager: RoomManager;
+  private remotePlayerManager: RemotePlayerManager;
 
   private gameState: GameState = GameState.LOBBY;
   private selectedMode: GameMode = GameMode.BATTLE_ROYALE;
@@ -115,6 +117,20 @@ class GameApp {
     this.botManager.registerPlayerWeaponListener(this.player);
     this.grenadeManager.setEntities(this.botManager, this.player);
 
+    this.remotePlayerManager = new RemotePlayerManager(
+      this.scene,
+      this.sound,
+      this.particles,
+      this.roomManager
+    );
+
+    // Register weapon check for remote players too
+    const baseWeaponFired = this.player.onWeaponFired;
+    this.player.onWeaponFired = (origin, dir, weapon) => {
+      baseWeaponFired(origin, dir, weapon);
+      this.remotePlayerManager.checkHitAgainstPeers(origin, dir, weapon, this.player);
+    };
+
     // 8. Initialize UI Overlay & Room Handlers
     this.uiManager = new UIManager(this.player, this.zoneManager, this.botManager);
     this.setupRoomHandlers();
@@ -178,14 +194,33 @@ class GameApp {
       if (rEl) rEl.innerText = `${red}`;
     };
 
-    const copyBtn = document.getElementById('btn-copy-invite');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', () => {
-        const link = this.roomManager.getInviteLink();
+    this.roomManager.onStartMatch = (mode: GameMode) => {
+      this.selectedMode = mode;
+      this.startMatch();
+    };
+
+    const copyLanBtn = document.getElementById('btn-copy-lan');
+    const copyWanBtn = document.getElementById('btn-copy-wan');
+
+    if (copyLanBtn) {
+      copyLanBtn.addEventListener('click', () => {
+        const link = this.roomManager.getLocalNetworkLink();
         navigator.clipboard.writeText(link).then(() => {
-          copyBtn.innerText = '✅ LINK COPIED!';
+          copyLanBtn.innerText = '✅ WI-FI LINK COPIED!';
           setTimeout(() => {
-            copyBtn.innerText = '🔗 COPY INVITE LINK';
+            copyLanBtn.innerText = '📋 COPY WI-FI LINK';
+          }, 2000);
+        });
+      });
+    }
+
+    if (copyWanBtn) {
+      copyWanBtn.addEventListener('click', () => {
+        const link = this.roomManager.getPublicInternetLink();
+        navigator.clipboard.writeText(link).then(() => {
+          copyWanBtn.innerText = '✅ INTERNET LINK COPIED!';
+          setTimeout(() => {
+            copyWanBtn.innerText = '📋 COPY INTERNET LINK';
           }, 2000);
         });
       });
@@ -195,6 +230,11 @@ class GameApp {
   private renderRoomSlots(room: RoomConfig): void {
     const codeEl = document.getElementById('room-code-display');
     if (codeEl) codeEl.innerText = room.roomId;
+
+    const lanInput = document.getElementById('invite-lan-input') as HTMLInputElement | null;
+    const wanInput = document.getElementById('invite-wan-input') as HTMLInputElement | null;
+    if (lanInput) lanInput.value = this.roomManager.getLocalNetworkLink();
+    if (wanInput) wanInput.value = this.roomManager.getPublicInternetLink();
 
     const blueContainer = document.getElementById('blue-slots');
     const redContainer = document.getElementById('red-slots');
@@ -296,6 +336,15 @@ class GameApp {
     const clashScoreboard = document.getElementById('clash-scoreboard');
     const zoneBanner = document.getElementById('zone-banner');
 
+    if (this.roomManager.isHost && this.roomManager.currentRoom) {
+      this.roomManager.sendNetworkMessage({
+        type: 'START_MATCH',
+        mode: this.selectedMode
+      });
+    }
+
+    const isRedTeam = !this.roomManager.isHost && this.roomManager.preferredTeam === 'red';
+
     if (this.selectedMode === GameMode.BATTLE_ROYALE) {
       if (clashScoreboard) clashScoreboard.classList.add('hidden');
       if (zoneBanner) zoneBanner.classList.remove('hidden');
@@ -307,7 +356,13 @@ class GameApp {
       if (clashScoreboard) clashScoreboard.classList.remove('hidden');
       if (zoneBanner) zoneBanner.classList.add('hidden');
 
-      this.player.position.set(0, 48, -15);
+      if (isRedTeam) {
+        this.player.position.set(0, 48, 15);
+        this.player.yaw = Math.PI;
+        this.player.playerMesh.rotation.y = Math.PI;
+      } else {
+        this.player.position.set(0, 48, -15);
+      }
       this.roomManager.resetScores();
       // Compact arena safe zone
       this.zoneManager.currentRadius = 40;
@@ -317,7 +372,13 @@ class GameApp {
       if (clashScoreboard) clashScoreboard.classList.remove('hidden');
       if (zoneBanner) zoneBanner.classList.add('hidden');
 
-      this.player.position.set(0, 48, -20);
+      if (isRedTeam) {
+        this.player.position.set(0, 48, 20);
+        this.player.yaw = Math.PI;
+        this.player.playerMesh.rotation.y = Math.PI;
+      } else {
+        this.player.position.set(0, 48, -20);
+      }
       this.roomManager.resetScores();
       this.zoneManager.currentRadius = 55;
       this.zoneManager.targetRadius = 30;
@@ -380,6 +441,7 @@ class GameApp {
     }
 
     this.botManager.update(delta, this.player);
+    this.remotePlayerManager.update(delta, this.player);
     this.particles.update(delta);
     this.uiManager.update();
 

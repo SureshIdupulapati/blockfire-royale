@@ -1028,6 +1028,74 @@ body, html {
   color: var(--primary-gold);
 }
 
+.conn-status-tag {
+  font-size: 10px;
+  font-weight: 800;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.room-multi-links {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.link-option-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.link-option-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-tag-lan {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--primary-gold);
+}
+
+.link-tag-wan {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--cyber-blue);
+}
+
+.link-tag-desc {
+  font-size: 9px;
+  color: #94a3b8;
+}
+
+.link-input-group {
+  display: flex;
+  gap: 6px;
+}
+
+.link-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+  color: #f8fafc;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  padding: 4px 8px;
+  outline: none;
+}
+
 .btn-copy-link {
   background: rgba(0, 210, 255, 0.15);
   border: 1px solid var(--cyber-blue);
@@ -1035,15 +1103,43 @@ body, html {
   font-family: inherit;
   font-size: 11px;
   font-weight: 800;
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-radius: 4px;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.15s ease;
+}
+
+.btn-copy-accent {
+  background: rgba(245, 166, 35, 0.2);
+  border-color: var(--primary-gold);
+  color: var(--primary-gold);
+}
+
+.btn-copy-accent:hover {
+  background: var(--primary-gold);
+  color: #000;
 }
 
 .btn-copy-link:hover {
   background: var(--cyber-blue);
   color: #000;
+}
+
+.link-warning-note {
+  font-size: 10px;
+  color: #fbbf24;
+  background: rgba(245, 166, 35, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 3px solid var(--primary-gold);
+}
+
+.link-warning-note code {
+  color: #ef4444;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1px 4px;
+  border-radius: 2px;
 }
 
 .room-teams-grid {

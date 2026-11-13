@@ -55,24 +55,26 @@ export class BotManager {
     this.bots = [];
 
     if (mode === GameMode.DUEL_1V1) {
-      // 1v1 DUEL: Player vs 1 Bot Rival
+      // 1v1 DUEL: Player vs 1 Bot Rival (unless filled by a human friend)
       this.totalParticipants = 2;
       this.aliveCount = 2;
 
-      const rivalBot = new BotAI(
-        'bot-duel',
-        'Bot_Rival',
-        new THREE.Vector3(25, 45, 25),
-        this.world,
-        this.sound,
-        this.particles,
-        this.glooManager,
-        this.zoneManager,
-        'red'
-      );
-      this.scene.add(rivalBot.mesh);
-      this.bots.push(rivalBot);
-
+      const oppSlot = roomConfig?.slots.find(s => s.slotId === 1);
+      if (!oppSlot || !oppSlot.isHuman) {
+        const rivalBot = new BotAI(
+          'bot-duel',
+          'Bot_Rival',
+          new THREE.Vector3(25, 45, 25),
+          this.world,
+          this.sound,
+          this.particles,
+          this.glooManager,
+          this.zoneManager,
+          'red'
+        );
+        this.scene.add(rivalBot.mesh);
+        this.bots.push(rivalBot);
+      }
     } else if (mode === GameMode.CLASH_2V2) {
       // 2v2 CLASH: 2 on Blue (Player + Ally) vs 2 on Red (Enemies)
       this.totalParticipants = 4;

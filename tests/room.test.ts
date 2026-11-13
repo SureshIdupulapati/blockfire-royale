@@ -57,4 +57,26 @@ describe('Custom Room & 1v1 / 2v2 Modes', () => {
     expect(manager.teamBlueScore).toBe(2);
     expect(manager.teamRedScore).toBe(1);
   });
+
+  it('should generate valid LAN Wi-Fi link with host IP', () => {
+    const manager = new RoomManager();
+    const room = manager.createRoom(GameMode.DUEL_1V1);
+    const link = manager.getLocalNetworkLink('red');
+
+    expect(link).toContain('192.168.1.66:3000');
+    expect(link).toContain(room.roomId);
+    expect(link).toContain('team=red');
+    expect(link).toContain('mode=DUEL_1V1');
+  });
+
+  it('should generate valid public internet tunnel link', () => {
+    const manager = new RoomManager();
+    const room = manager.createRoom(GameMode.CLASH_2V2);
+    const link = manager.getPublicInternetLink('red');
+
+    expect(link).toContain('https://');
+    expect(link).toContain('loca.lt');
+    expect(link).toContain(room.roomId);
+  });
 });
+

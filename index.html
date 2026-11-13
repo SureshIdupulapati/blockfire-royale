@@ -251,7 +251,38 @@
           <div id="room-panel" class="room-panel hidden">
             <div class="room-header">
               <div class="room-id-tag">ROOM: <span id="room-code-display">ROOM-4821</span></div>
-              <button id="btn-copy-invite" class="btn-copy-link">🔗 COPY INVITE LINK</button>
+              <div class="room-network-badge">
+                <span id="room-conn-status" class="conn-status-tag">🟢 SERVER READY (PORT 3000)</span>
+              </div>
+            </div>
+
+            <!-- MULTI-PC INVITE LINKS BOX -->
+            <div class="room-multi-links">
+              <div class="link-option-row">
+                <div class="link-option-info">
+                  <span class="link-tag-lan">📶 SAME WI-FI LINK (RECOMMENDED):</span>
+                  <span class="link-tag-desc">For friends on your same Wi-Fi router</span>
+                </div>
+                <div class="link-input-group">
+                  <input type="text" id="invite-lan-input" class="link-input" readonly value="http://192.168.1.66:3000" />
+                  <button id="btn-copy-lan" class="btn-copy-link btn-copy-accent">📋 COPY WI-FI LINK</button>
+                </div>
+              </div>
+
+              <div class="link-option-row">
+                <div class="link-option-info">
+                  <span class="link-tag-wan">🌐 REMOTE INTERNET LINK:</span>
+                  <span class="link-tag-desc">For friends at another home / network</span>
+                </div>
+                <div class="link-input-group">
+                  <input type="text" id="invite-wan-input" class="link-input" readonly value="https://heavy-chipmunk-43.loca.lt" />
+                  <button id="btn-copy-wan" class="btn-copy-link">📋 COPY INTERNET LINK</button>
+                </div>
+              </div>
+
+              <div class="link-warning-note">
+                ⚠️ <b>Multi-PC Note:</b> Never send <code>localhost</code> to another PC — send the <b>Same Wi-Fi Link</b> so your friend connects directly to your machine!
+              </div>
             </div>
 
             <div class="room-teams-grid">

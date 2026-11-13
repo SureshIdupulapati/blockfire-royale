@@ -75,6 +75,7 @@ export class PlayerController {
   private shootCooldown: number = 0;
   public isReloading: boolean = false;
   public reloadTimer: number = 0;
+  public isShooting: boolean = false;
   private isMouseDown: boolean = false;
 
   // 3D Player Character Model (Fully Animated Rig)
@@ -556,6 +557,7 @@ export class PlayerController {
   }
 
   private fireBullet(weapon: WeaponConfig): void {
+    this.isShooting = true;
     this.recoil.applyRecoil(weapon.recoilVertical, weapon.recoilHorizontal, this.isADS);
     this.sound.playGunshot(weapon.soundType as any);
 

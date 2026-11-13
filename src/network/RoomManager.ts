@@ -4,12 +4,20 @@ export class RoomManager {
   public currentRoom: RoomConfig | null = null;
   public localPlayerSlot: number = 0;
   public isHost: boolean = true;
+  public preferredTeam: Team = 'red';
   private channel: BroadcastChannel | null = null;
+  private socket: WebSocket | null = null;
 
   public teamBlueScore: number = 0;
   public teamRedScore: number = 0;
   public onRoomUpdated: (room: RoomConfig) => void = () => {};
   public onScoreUpdated: (blueScore: number, redScore: number) => void = () => {};
+  public onStartMatch: (mode: GameMode) => void = () => {};
+  public onRemotePlayerUpdate: (data: any) => void = () => {};
+
+  public readonly localIP: string = '192.168.1.66';
+  public readonly publicTunnelHost: string = 'https://heavy-chipmunk-43.loca.lt';
+  public readonly tunnelPassword: string = '202.141.83.150';
 
   constructor() {
     this.checkUrlForRoomInvite();
@@ -27,9 +35,6 @@ export class RoomManager {
     }
   }
 
-  /**
-   * Creates a new custom room with specified mode (1v1 or 2v2)
-   */
   public createRoom(mode: GameMode = GameMode.CLASH_2V2, targetKills: number = 5): RoomConfig {
     const roomId = 'ROOM-' + Math.floor(1000 + Math.random() * 9000);
     this.isHost = true;
@@ -38,16 +43,14 @@ export class RoomManager {
     const slots: RoomSlot[] = [];
 
     if (mode === GameMode.DUEL_1V1) {
-      // Slot 0: Team Blue (Host)
       slots.push({
         slotId: 0,
         team: 'blue',
-        name: 'Player 1 (You)',
+        name: 'Player 1 (Host)',
         isHuman: true,
         isHost: true,
         isReady: true
       });
-      // Slot 1: Team Red (Opponent)
       slots.push({
         slotId: 1,
         team: 'red',
@@ -57,11 +60,10 @@ export class RoomManager {
         isReady: true
       });
     } else if (mode === GameMode.CLASH_2V2) {
-      // Team Blue
       slots.push({
         slotId: 0,
         team: 'blue',
-        name: 'Player 1 (You)',
+        name: 'Player 1 (Host)',
         isHuman: true,
         isHost: true,
         isReady: true
@@ -74,8 +76,6 @@ export class RoomManager {
         isHost: false,
         isReady: true
       });
-
-      // Team Red
       slots.push({
         slotId: 2,
         team: 'red',
@@ -102,70 +102,135 @@ export class RoomManager {
       slots
     };
 
-    this.initP2PChannel(roomId);
+    this.initNetworking(roomId);
     this.onRoomUpdated(this.currentRoom);
     return this.currentRoom;
   }
 
-  /**
-   * Joins an existing room by code or URL
-   */
   public joinRoom(roomId: string, mode: GameMode = GameMode.CLASH_2V2, preferredTeam: Team = 'red'): void {
     this.isHost = false;
-    this.initP2PChannel(roomId);
+    this.preferredTeam = preferredTeam;
+    this.initNetworking(roomId);
 
-    // Ask host for current room state
-    if (this.channel) {
-      this.channel.postMessage({
-        type: 'PLAYER_JOIN_REQUEST',
-        payload: {
-          name: 'Player 2 (Friend)',
-          preferredTeam
-        }
-      });
-    }
+    // Send join request via WebSocket and BroadcastChannel
+    const joinMsg = {
+      type: 'PLAYER_JOIN_REQUEST',
+      roomId,
+      payload: {
+        name: 'Player 2 (Friend)',
+        preferredTeam
+      }
+    };
 
-    // Temporary fallback if joining without open host tab
+    this.sendNetworkMessage(joinMsg);
+
     if (!this.currentRoom) {
       this.currentRoom = this.createRoom(mode);
       this.currentRoom.roomId = roomId;
     }
   }
 
-  private initP2PChannel(roomId: string): void {
+  private initNetworking(roomId: string): void {
+    // 1. BroadcastChannel (for local tab testing)
     if (this.channel) {
       this.channel.close();
     }
-
     try {
       this.channel = new BroadcastChannel(`blockfire_${roomId}`);
-      this.channel.onmessage = (event) => this.handleP2PMessage(event.data);
+      this.channel.onmessage = (event) => this.handleNetworkMessage(event.data);
     } catch {
-      // Fallback if BroadcastChannel is unavailable
+      // BroadcastChannel optional fallback
+    }
+
+    // 2. WebSocket Server Connection (for cross-PC multiplayer)
+    if (typeof window !== 'undefined') {
+      if (this.socket) {
+        this.socket.close();
+      }
+
+      try {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        this.socket = new WebSocket(`${proto}//${host}/api/multiplayer`);
+
+        this.socket.onopen = () => {
+          this.socket?.send(JSON.stringify({
+            type: 'JOIN_ROOM',
+            roomId
+          }));
+
+          if (!this.isHost) {
+            this.socket?.send(JSON.stringify({
+              type: 'PLAYER_JOIN_REQUEST',
+              roomId,
+              payload: {
+                name: 'Player 2 (Friend)',
+                preferredTeam: this.preferredTeam
+              }
+            }));
+          }
+        };
+
+        this.socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            this.handleNetworkMessage(data);
+          } catch (e) {
+            console.error('WS parse error:', e);
+          }
+        };
+      } catch (e) {
+        console.warn('WebSocket connection not supported in current environment', e);
+      }
     }
   }
 
-  private handleP2PMessage(data: any): void {
+  public sendNetworkMessage(data: any): void {
+    if (this.channel) {
+      try { this.channel.postMessage(data); } catch {}
+    }
+    if (this.socket) {
+      if (this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify(data));
+      } else if (this.socket.readyState === WebSocket.CONNECTING) {
+        this.socket.addEventListener('open', () => {
+          this.socket?.send(JSON.stringify(data));
+        }, { once: true });
+      }
+    }
+  }
+
+  private handleNetworkMessage(data: any): void {
     if (!data || !data.type) return;
 
     if (data.type === 'PLAYER_JOIN_REQUEST' && this.isHost && this.currentRoom) {
-      // Host assigns joining player to empty or bot slot
       const req = data.payload;
       const targetTeam = req.preferredTeam || 'red';
 
-      // Find first bot slot on requested team
       const slot = this.currentRoom.slots.find(s => s.team === targetTeam && !s.isHuman);
       if (slot) {
         slot.isHuman = true;
-        slot.name = req.name || 'Friend';
+        slot.name = req.name || 'Friend (Online)';
         slot.isReady = true;
 
         this.broadcastRoomSync();
         this.onRoomUpdated(this.currentRoom);
       }
+    } else if (data.type === 'JOIN_ROOM' && this.isHost && this.currentRoom) {
+      this.broadcastRoomSync();
     } else if (data.type === 'ROOM_SYNC' && data.payload) {
       this.currentRoom = data.payload;
+      if (!this.isHost) {
+        const mySlot = this.currentRoom?.slots.find(s => s.team === this.preferredTeam && s.isHuman && !s.isHost);
+        if (mySlot) {
+          this.localPlayerSlot = mySlot.slotId;
+        }
+      }
       this.onRoomUpdated(this.currentRoom!);
+    } else if (data.type === 'START_MATCH') {
+      this.onStartMatch(data.mode);
+    } else if (data.type === 'PLAYER_STATE') {
+      this.onRemotePlayerUpdate(data);
     } else if (data.type === 'SCORE_UPDATE') {
       this.teamBlueScore = data.payload.blue;
       this.teamRedScore = data.payload.red;
@@ -174,17 +239,14 @@ export class RoomManager {
   }
 
   public broadcastRoomSync(): void {
-    if (this.channel && this.currentRoom) {
-      this.channel.postMessage({
+    if (this.currentRoom) {
+      this.sendNetworkMessage({
         type: 'ROOM_SYNC',
         payload: this.currentRoom
       });
     }
   }
 
-  /**
-   * Toggles a slot between human invite and AI bot
-   */
   public toggleSlotBot(slotId: number): void {
     if (!this.currentRoom || !this.isHost) return;
     const slot = this.currentRoom.slots.find(s => s.slotId === slotId);
@@ -202,18 +264,37 @@ export class RoomManager {
   }
 
   /**
-   * Generates shareable invitation link for friends
+   * Generates the LAN Wi-Fi network link for another PC on the same Wi-Fi/network
+   */
+  public getLocalNetworkLink(team: Team = 'red'): string {
+    if (!this.currentRoom) return '';
+    return `http://${this.localIP}:3000/?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
+  }
+
+  /**
+   * Generates the public HTTPS internet tunnel link for a friend playing from another location
+   */
+  public getPublicInternetLink(team: Team = 'red'): string {
+    if (!this.currentRoom) return '';
+    return `${this.publicTunnelHost}/?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
+  }
+
+  /**
+   * Default invite link generator: automatically replaces localhost with LAN IP so friends on other PCs can connect!
    */
   public getInviteLink(team: Team = 'red'): string {
     if (typeof window === 'undefined') return '';
     if (!this.currentRoom) return window.location.href;
-    const base = window.location.origin + window.location.pathname;
-    return `${base}?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
+
+    let host = window.location.host;
+    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      host = `${this.localIP}:3000`;
+    }
+
+    const proto = window.location.protocol;
+    return `${proto}//${host}/?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
   }
 
-  /**
-   * Records a kill for team scoring in 1v1 / 2v2
-   */
   public registerKill(killerTeam: Team): { blueWins: boolean; redWins: boolean } {
     if (killerTeam === 'blue') {
       this.teamBlueScore++;
@@ -221,12 +302,10 @@ export class RoomManager {
       this.teamRedScore++;
     }
 
-    if (this.channel) {
-      this.channel.postMessage({
-        type: 'SCORE_UPDATE',
-        payload: { blue: this.teamBlueScore, red: this.teamRedScore }
-      });
-    }
+    this.sendNetworkMessage({
+      type: 'SCORE_UPDATE',
+      payload: { blue: this.teamBlueScore, red: this.teamRedScore }
+    });
 
     this.onScoreUpdated(this.teamBlueScore, this.teamRedScore);
 
