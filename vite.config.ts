@@ -81,6 +81,7 @@ function multiplayerWsPlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: './',
   plugins: [multiplayerWsPlugin()],
   server: {
     port: 3000,
