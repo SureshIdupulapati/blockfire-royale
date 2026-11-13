@@ -24,6 +24,7 @@
   "author": "Sahityakar",
   "license": "MIT",
   "dependencies": {
+    "peerjs": "^1.5.5",
     "three": "^0.174.0",
     "ws": "^8.23.0"
   },

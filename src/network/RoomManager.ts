@@ -1,4 +1,5 @@
 import { GameMode, RoomConfig, RoomSlot, Team } from '../types';
+import { Peer, DataConnection } from 'peerjs';
 
 export class RoomManager {
   public currentRoom: RoomConfig | null = null;
@@ -7,6 +8,8 @@ export class RoomManager {
   public preferredTeam: Team = 'red';
   private channel: BroadcastChannel | null = null;
   private socket: WebSocket | null = null;
+  private peer: Peer | null = null;
+  private peerConnections: DataConnection[] = [];
 
   public teamBlueScore: number = 0;
   public teamRedScore: number = 0;
@@ -16,8 +19,7 @@ export class RoomManager {
   public onRemotePlayerUpdate: (data: any) => void = () => {};
 
   public readonly localIP: string = '192.168.1.66';
-  public readonly publicTunnelHost: string = 'https://heavy-chipmunk-43.loca.lt';
-  public readonly tunnelPassword: string = '202.141.83.150';
+  public readonly publicLiveHost: string = 'https://sureshidupulapati.github.io/blockfire-royale';
 
   constructor() {
     this.checkUrlForRoomInvite();
@@ -142,8 +144,11 @@ export class RoomManager {
       // BroadcastChannel optional fallback
     }
 
-    // 2. WebSocket Server Connection (for cross-PC multiplayer)
-    if (typeof window !== 'undefined') {
+    // 2. WebRTC PeerJS Connection (works globally on GitHub Pages & across PCs)
+    this.initPeerNetworking(roomId);
+
+    // 3. WebSocket Server Connection (for local Vite dev server)
+    if (typeof window !== 'undefined' && (window.location.host.includes('localhost') || window.location.host.includes('192.168.'))) {
       if (this.socket) {
         this.socket.close();
       }
@@ -185,6 +190,91 @@ export class RoomManager {
     }
   }
 
+  private initPeerNetworking(roomId: string): void {
+    if (typeof window === 'undefined') return;
+
+    if (this.peer) {
+      try { this.peer.destroy(); } catch {}
+      this.peer = null;
+    }
+    this.peerConnections = [];
+
+    const safeId = roomId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+    try {
+      if (this.isHost) {
+        const hostPeerId = `bf-${safeId}-host`;
+        this.peer = new Peer(hostPeerId);
+
+        this.peer.on('connection', (conn) => {
+          this.peerConnections.push(conn);
+          this.updateConnectionStatus('🟢 FRIEND CONNECTED!');
+
+          conn.on('open', () => {
+            if (this.currentRoom) {
+              conn.send({ type: 'ROOM_SYNC', payload: this.currentRoom });
+            }
+          });
+
+          conn.on('data', (data) => {
+            this.handleNetworkMessage(data);
+          });
+
+          conn.on('close', () => {
+            this.peerConnections = this.peerConnections.filter(c => c !== conn);
+            this.updateConnectionStatus('🟡 FRIEND DISCONNECTED');
+          });
+        });
+
+        this.peer.on('error', (err) => {
+          console.warn('PeerJS host info:', err);
+        });
+      } else {
+        this.peer = new Peer();
+
+        this.peer.on('open', () => {
+          const hostPeerId = `bf-${safeId}-host`;
+          const conn = this.peer!.connect(hostPeerId, { reliable: true });
+          this.peerConnections.push(conn);
+
+          conn.on('open', () => {
+            this.updateConnectionStatus('🟢 CONNECTED TO HOST!');
+            conn.send({
+              type: 'PLAYER_JOIN_REQUEST',
+              roomId,
+              payload: {
+                name: 'Player 2 (Friend)',
+                preferredTeam: this.preferredTeam
+              }
+            });
+          });
+
+          conn.on('data', (data) => {
+            this.handleNetworkMessage(data);
+          });
+
+          conn.on('close', () => {
+            this.peerConnections = this.peerConnections.filter(c => c !== conn);
+            this.updateConnectionStatus('🔴 DISCONNECTED');
+          });
+        });
+
+        this.peer.on('error', (err) => {
+          console.warn('PeerJS client info:', err);
+        });
+      }
+    } catch (e) {
+      console.warn('PeerJS init failed:', e);
+    }
+  }
+
+  private updateConnectionStatus(text: string): void {
+    if (typeof document !== 'undefined') {
+      const el = document.getElementById('room-conn-status');
+      if (el) el.innerText = text;
+    }
+  }
+
   public sendNetworkMessage(data: any): void {
     if (this.channel) {
       try { this.channel.postMessage(data); } catch {}
@@ -196,6 +286,11 @@ export class RoomManager {
         this.socket.addEventListener('open', () => {
           this.socket?.send(JSON.stringify(data));
         }, { once: true });
+      }
+    }
+    for (const conn of this.peerConnections) {
+      if (conn && conn.open) {
+        try { conn.send(data); } catch {}
       }
     }
   }
@@ -272,27 +367,29 @@ export class RoomManager {
   }
 
   /**
-   * Generates the public HTTPS internet tunnel link for a friend playing from another location
+   * Generates the public HTTPS internet link for a friend playing from another location
    */
   public getPublicInternetLink(team: Team = 'red'): string {
     if (!this.currentRoom) return '';
-    return `${this.publicTunnelHost}/?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
+    return `${this.publicLiveHost}/?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
   }
 
   /**
-   * Default invite link generator: automatically replaces localhost with LAN IP so friends on other PCs can connect!
+   * Default invite link generator:
+   * - On GitHub Pages: uses official live URL
+   * - On Localhost: replaces localhost with LAN Wi-Fi IP
    */
   public getInviteLink(team: Team = 'red'): string {
     if (typeof window === 'undefined') return '';
     if (!this.currentRoom) return window.location.href;
 
-    let host = window.location.host;
-    if (host.includes('localhost') || host.includes('127.0.0.1')) {
-      host = `${this.localIP}:3000`;
+    if (!window.location.host.includes('localhost') && !window.location.host.includes('127.0.0.1')) {
+      const base = window.location.origin + window.location.pathname;
+      return `${base}?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
     }
 
     const proto = window.location.protocol;
-    return `${proto}//${host}/?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
+    return `${proto}//${this.localIP}:3000/?room=${this.currentRoom.roomId}&mode=${this.currentRoom.mode}&team=${team}`;
   }
 
   public registerKill(killerTeam: Team): { blueWins: boolean; redWins: boolean } {

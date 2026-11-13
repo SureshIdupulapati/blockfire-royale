@@ -69,13 +69,13 @@ describe('Custom Room & 1v1 / 2v2 Modes', () => {
     expect(link).toContain('mode=DUEL_1V1');
   });
 
-  it('should generate valid public internet tunnel link', () => {
+  it('should generate valid public internet live link', () => {
     const manager = new RoomManager();
     const room = manager.createRoom(GameMode.CLASH_2V2);
     const link = manager.getPublicInternetLink('red');
 
     expect(link).toContain('https://');
-    expect(link).toContain('loca.lt');
+    expect(link).toContain('github.io');
     expect(link).toContain(room.roomId);
   });
 });
