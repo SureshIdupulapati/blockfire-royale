@@ -5,6 +5,7 @@ import { VoxelWorld } from './voxel/VoxelWorld';
 import { ParticleManager } from './combat/ParticleManager';
 import { GlooWallManager } from './freefire/GlooWallManager';
 import { CharacterSkills } from './freefire/CharacterSkills';
+import { GrenadeManager } from './combat/GrenadeManager';
 import { PlayerController } from './player/PlayerController';
 import { ZoneManager } from './zone/ZoneManager';
 import { AirDropManager } from './airdrop/AirDropManager';
@@ -22,6 +23,7 @@ class GameApp {
   private particles: ParticleManager;
   private glooManager: GlooWallManager;
   private skills: CharacterSkills;
+  private grenadeManager: GrenadeManager;
   private player: PlayerController;
   private zoneManager: ZoneManager;
   private airdropManager: AirDropManager;
@@ -64,6 +66,7 @@ class GameApp {
     this.particles = new ParticleManager(this.scene);
     this.glooManager = new GlooWallManager(this.world, this.sound, this.particles);
     this.skills = new CharacterSkills(this.sound, this.particles);
+    this.grenadeManager = new GrenadeManager(this.scene, this.world, this.sound, this.particles);
 
     // 4. Generate Procedural Voxel Island
     this.world.generateTerrain();
@@ -93,7 +96,8 @@ class GameApp {
       this.sound,
       this.particles,
       this.glooManager,
-      this.skills
+      this.skills,
+      this.grenadeManager
     );
 
     this.botManager = new BotManager(
@@ -105,6 +109,8 @@ class GameApp {
       this.zoneManager
     );
     this.botManager.registerPlayerWeaponListener(this.player);
+
+    this.grenadeManager.setEntities(this.botManager, this.player);
 
     // 8. Initialize UI Overlay
     this.uiManager = new UIManager(this.player, this.zoneManager, this.botManager);
@@ -230,6 +236,7 @@ class GameApp {
 
     this.world.updateMeshes(this.scene);
     this.glooManager.update(delta);
+    this.grenadeManager.update(delta);
     this.zoneManager.update(delta);
 
     if (this.zoneManager.isOutsideZone(this.player.position)) {

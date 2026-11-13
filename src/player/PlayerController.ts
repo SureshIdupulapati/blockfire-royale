@@ -9,6 +9,7 @@ import { SoundSynthesizer } from '../audio/SoundSynthesizer';
 import { ParticleManager } from '../combat/ParticleManager';
 import { GlooWallManager } from '../freefire/GlooWallManager';
 import { CharacterSkills } from '../freefire/CharacterSkills';
+import { GrenadeManager } from '../combat/GrenadeManager';
 
 export class PlayerController {
   public camera: THREE.PerspectiveCamera;
@@ -18,6 +19,7 @@ export class PlayerController {
   public particles: ParticleManager;
   public glooManager: GlooWallManager;
   public skills: CharacterSkills;
+  public grenadeManager: GrenadeManager;
 
   // Player position & physics
   public position: THREE.Vector3 = new THREE.Vector3(0, 48, 0);
@@ -60,8 +62,9 @@ export class PlayerController {
 
   public inventory: InventorySlot[] = [
     { weapon: WEAPON_REGISTRY.m416, currentAmmo: 30, reserveAmmo: 180 },
-    { weapon: WEAPON_REGISTRY.mp40, currentAmmo: 32, reserveAmmo: 200 },
+    { weapon: WEAPON_REGISTRY.awm, currentAmmo: 5, reserveAmmo: 25 },
     { weapon: WEAPON_REGISTRY.pickaxe, currentAmmo: 0, reserveAmmo: 0 },
+    { weapon: WEAPON_REGISTRY.frag_grenade, currentAmmo: 4, reserveAmmo: 0 },
     { weapon: WEAPON_REGISTRY.gloo_wall, currentAmmo: 4, reserveAmmo: 0 },
     { weapon: WEAPON_REGISTRY.medkit, currentAmmo: 3, reserveAmmo: 0 }
   ];
@@ -85,6 +88,7 @@ export class PlayerController {
   private gunMesh: THREE.Group;
   private pickaxeMesh: THREE.Group;
   private glooOrbMesh: THREE.Mesh;
+  private grenadeMesh: THREE.Group;
   private muzzleFlashMesh: THREE.Mesh;
 
   // Animation timers
@@ -102,7 +106,8 @@ export class PlayerController {
     sound: SoundSynthesizer,
     particles: ParticleManager,
     glooManager: GlooWallManager,
-    skills: CharacterSkills
+    skills: CharacterSkills,
+    grenadeManager: GrenadeManager
   ) {
     this.camera = camera;
     this.scene = scene;
@@ -111,16 +116,16 @@ export class PlayerController {
     this.particles = particles;
     this.glooManager = glooManager;
     this.skills = skills;
+    this.grenadeManager = grenadeManager;
 
     // 1. Build Animated Voxel Character Model
     this.playerMesh = new THREE.Group();
 
-    // Materials
     const skinMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
-    const vestMat = new THREE.MeshLambertMaterial({ color: 0x1e3a5f }); // Tactical navy camo vest
-    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x334155 }); // Dark combat pants
-    const helmetMat = new THREE.MeshLambertMaterial({ color: 0x0f172a }); // Tactical Kevlar helmet
-    const gunMat = new THREE.MeshLambertMaterial({ color: 0x18181b }); // Matte steel
+    const vestMat = new THREE.MeshLambertMaterial({ color: 0x1e3a5f });
+    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+    const helmetMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+    const gunMat = new THREE.MeshLambertMaterial({ color: 0x18181b });
     const goldMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
 
     // Legs
@@ -135,19 +140,17 @@ export class PlayerController {
     this.legRight.castShadow = true;
     this.playerMesh.add(this.legRight);
 
-    // Torso Group (contains upper body, head, arms, and gun)
+    // Torso Group
     this.torsoGroup = new THREE.Group();
     this.torsoGroup.position.set(0, 0.75, 0);
     this.playerMesh.add(this.torsoGroup);
 
-    // Torso body
     const torsoGeo = new THREE.BoxGeometry(0.58, 0.72, 0.32);
     const torsoMesh = new THREE.Mesh(torsoGeo, vestMat);
     torsoMesh.position.set(0, 0.36, 0);
     torsoMesh.castShadow = true;
     this.torsoGroup.add(torsoMesh);
 
-    // Backpack
     const packGeo = new THREE.BoxGeometry(0.42, 0.45, 0.16);
     const packMesh = new THREE.Mesh(packGeo, helmetMat);
     packMesh.position.set(0, 0.38, 0.22);
@@ -159,7 +162,6 @@ export class PlayerController {
     this.headMesh.position.set(0, 0.9, 0);
     this.headMesh.castShadow = true;
 
-    // Tactical Helmet & Visor
     const helmetGeo = new THREE.BoxGeometry(0.4, 0.2, 0.4);
     const helmetMesh = new THREE.Mesh(helmetGeo, helmetMat);
     helmetMesh.position.set(0, 0.1, 0);
@@ -192,8 +194,7 @@ export class PlayerController {
     this.armRight.add(armRMesh);
     this.torsoGroup.add(this.armRight);
 
-    // 2. Weapon Meshes
-    // Gun Group
+    // 2. Gun Mesh with Tactical 3D Scope
     this.gunMesh = new THREE.Group();
     const receiverGeo = new THREE.BoxGeometry(0.1, 0.14, 0.45);
     const receiverMesh = new THREE.Mesh(receiverGeo, gunMat);
@@ -208,6 +209,26 @@ export class PlayerController {
     const magMesh = new THREE.Mesh(magGeo, gunMat);
     magMesh.position.set(0, -0.14, -0.05);
     this.gunMesh.add(magMesh);
+
+    // 3D Optical Tactical Scope Cylinder mounted on rifle rail
+    const scopeTubeGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.26, 8);
+    const scopeMat = new THREE.MeshLambertMaterial({ color: 0x27272a });
+    const scopeTube = new THREE.Mesh(scopeTubeGeo, scopeMat);
+    scopeTube.rotation.x = Math.PI / 2;
+    scopeTube.position.set(0, 0.12, -0.05);
+    this.gunMesh.add(scopeTube);
+
+    const scopeBellGeo = new THREE.CylinderGeometry(0.055, 0.04, 0.08, 8);
+    const scopeBell = new THREE.Mesh(scopeBellGeo, scopeMat);
+    scopeBell.rotation.x = Math.PI / 2;
+    scopeBell.position.set(0, 0.12, -0.18);
+    this.gunMesh.add(scopeBell);
+
+    const lensGeo = new THREE.CircleGeometry(0.045, 8);
+    const lensMat = new THREE.MeshBasicMaterial({ color: 0x00d2ff });
+    const lens = new THREE.Mesh(lensGeo, lensMat);
+    lens.position.set(0, 0.12, -0.23);
+    this.gunMesh.add(lens);
 
     // Muzzle Flash
     const flashGeo = new THREE.OctahedronGeometry(0.14, 0);
@@ -244,6 +265,22 @@ export class PlayerController {
     this.glooOrbMesh.visible = false;
     this.armRight.add(this.glooOrbMesh);
 
+    // Frag Grenade Mesh in Hand
+    this.grenadeMesh = new THREE.Group();
+    const gBodyGeo = new THREE.DodecahedronGeometry(0.13, 1);
+    const gBodyMat = new THREE.MeshLambertMaterial({ color: 0x3f6212 });
+    const gBody = new THREE.Mesh(gBodyGeo, gBodyMat);
+    this.grenadeMesh.add(gBody);
+
+    const gCapGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.08, 6);
+    const gCap = new THREE.Mesh(gCapGeo, scopeMat);
+    gCap.position.y = 0.12;
+    this.grenadeMesh.add(gCap);
+
+    this.grenadeMesh.position.set(0, -0.35, -0.2);
+    this.grenadeMesh.visible = false;
+    this.armRight.add(this.grenadeMesh);
+
     this.scene.add(this.playerMesh);
 
     this.setupParachuteMesh();
@@ -253,7 +290,6 @@ export class PlayerController {
   private setupParachuteMesh(): void {
     this.parachuteMesh = new THREE.Group();
 
-    // Large military camouflage canopy
     const canopyGeo = new THREE.CylinderGeometry(2.8, 1.0, 1.4, 8, 1, true);
     const canopyMat = new THREE.MeshLambertMaterial({
       color: 0x16a34a,
@@ -263,7 +299,6 @@ export class PlayerController {
     canopy.position.y = 3.6;
     this.parachuteMesh.add(canopy);
 
-    // Cords
     const cordMat = new THREE.LineBasicMaterial({ color: 0xffffff });
     for (let i = 0; i < 4; i++) {
       const angle = (i * Math.PI) / 2;
@@ -307,6 +342,11 @@ export class PlayerController {
       this.deployGlooWall();
     }
 
+    // Quick throw grenade on [T]
+    if (e.code === 'KeyT') {
+      this.throwGrenade();
+    }
+
     if (e.code === 'Space' && this.isAirborne) {
       this.isParachuteOpen = !this.isParachuteOpen;
       if (this.parachuteMesh) {
@@ -314,7 +354,8 @@ export class PlayerController {
       }
     }
 
-    if (e.key >= '1' && e.key <= '5') {
+    // Number keys 1-6 for hotbar
+    if (e.key >= '1' && e.key <= '6') {
       const slot = parseInt(e.key, 10) - 1;
       this.selectSlot(slot);
     }
@@ -350,11 +391,10 @@ export class PlayerController {
       return;
     }
 
-    const adsMultiplier = this.isADS ? 0.45 : 1.0;
+    const adsMultiplier = this.isADS ? 0.35 : 1.0;
     this.yaw -= e.movementX * this.mouseSensitivity * adsMultiplier;
     this.pitch -= e.movementY * this.mouseSensitivity * adsMultiplier;
 
-    // Pitch limit (-80 to +80 degrees)
     this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch));
   }
 
@@ -381,6 +421,7 @@ export class PlayerController {
     this.gunMesh.visible = id === 'm416' || id === 'ak47' || id === 'mp40' || id === 'awm' || id === 'm1887';
     this.pickaxeMesh.visible = id === 'pickaxe';
     this.glooOrbMesh.visible = id === 'gloo_wall';
+    this.grenadeMesh.visible = id === 'frag_grenade';
   }
 
   public getActiveWeapon(): WeaponConfig | null {
@@ -394,18 +435,31 @@ export class PlayerController {
   public deployGlooWall(): boolean {
     if (this.vitals.glooCount <= 0) return false;
 
-    // Forward direction from camera view
     const lookDir = new THREE.Vector3();
     this.camera.getWorldDirection(lookDir);
 
     const success = this.glooManager.deployGlooWall(this.position, lookDir);
     if (success) {
       this.vitals.glooCount--;
-      // Arm throw gesture
       this.armRight.rotation.x = -1.2;
       return true;
     }
     return false;
+  }
+
+  public throwGrenade(): boolean {
+    const slot = this.inventory.find(s => s.weapon?.id === 'frag_grenade');
+    if (!slot || slot.currentAmmo <= 0) return false;
+
+    slot.currentAmmo--;
+    const lookDir = new THREE.Vector3();
+    this.camera.getWorldDirection(lookDir);
+
+    const startPos = this.position.clone().add(new THREE.Vector3(0.3, 1.5, 0));
+    this.grenadeManager.throwGrenade(startPos, lookDir);
+
+    this.armRight.rotation.x = -1.4;
+    return true;
   }
 
   public startReload(): void {
@@ -424,6 +478,11 @@ export class PlayerController {
     const slot = this.getActiveSlot();
     const weapon = slot.weapon;
     if (!weapon || this.isAirborne) return;
+
+    if (weapon.id === 'frag_grenade') {
+      this.throwGrenade();
+      return;
+    }
 
     if (weapon.id === 'gloo_wall') {
       this.deployGlooWall();
@@ -497,18 +556,14 @@ export class PlayerController {
   }
 
   private fireBullet(weapon: WeaponConfig): void {
-    // Recoil kick & audio
     this.recoil.applyRecoil(weapon.recoilVertical, weapon.recoilHorizontal, this.isADS);
     this.sound.playGunshot(weapon.soundType as any);
 
-    // Muzzle flash on gun barrel
     (this.muzzleFlashMesh.material as THREE.MeshBasicMaterial).opacity = 1.0;
     this.muzzleFlashTimer = 0.06;
 
-    // Arm recoil kick
     this.armRight.position.z += 0.08;
 
-    // Crosshair Raycast to find target point in 3D world
     const lookDir = new THREE.Vector3();
     this.camera.getWorldDirection(lookDir);
 
@@ -521,7 +576,6 @@ export class PlayerController {
     const rayOrigin = this.camera.position.clone();
     const voxelHit = raycastVoxel(this.world, rayOrigin, lookDir, weapon.range);
 
-    // Bullet leaves the actual gun tip in 3rd person
     const muzzleWorldPos = new THREE.Vector3();
     this.muzzleFlashMesh.getWorldPosition(muzzleWorldPos);
 
@@ -565,6 +619,20 @@ export class PlayerController {
     this.updateAnimations(delta);
     this.updateCombat(delta);
     this.updateCamera();
+    this.updateGrenadePreview();
+  }
+
+  private updateGrenadePreview(): void {
+    const slot = this.getActiveSlot();
+    const isGrenade = slot.weapon?.id === 'frag_grenade';
+    if (isGrenade && !this.isAirborne) {
+      const lookDir = new THREE.Vector3();
+      this.camera.getWorldDirection(lookDir);
+      const throwStart = this.position.clone().add(new THREE.Vector3(0.3, 1.5, 0));
+      this.grenadeManager.updateTrajectoryPreview(throwStart, lookDir, true);
+    } else {
+      this.grenadeManager.updateTrajectoryPreview(this.position, new THREE.Vector3(), false);
+    }
   }
 
   private updateAirborne(delta: number): void {
@@ -573,7 +641,6 @@ export class PlayerController {
     const highestGround = this.world.getHighestY(Math.floor(this.position.x), Math.floor(this.position.z)) + 1;
     this.altitude = Math.max(0, Math.round(this.position.y - highestGround));
 
-    // Auto deploy parachute at 18m
     if (this.altitude < 18 && !this.isParachuteOpen) {
       this.isParachuteOpen = true;
       if (this.parachuteMesh) this.parachuteMesh.visible = true;
@@ -590,7 +657,6 @@ export class PlayerController {
 
     this.position.addScaledVector(this.velocity, delta);
 
-    // Touchdown
     if (this.position.y <= highestGround + 0.2) {
       this.position.y = highestGround;
       this.isAirborne = false;
@@ -637,7 +703,7 @@ export class PlayerController {
 
     this.resolveVoxelCollisions(delta);
 
-    // Absolute island boundary clamp (can NEVER fall into void!)
+    // Island boundary clamp
     const mapLimit = 90;
     this.position.x = Math.max(-mapLimit, Math.min(mapLimit, this.position.x));
     this.position.z = Math.max(-mapLimit, Math.min(mapLimit, this.position.z));
@@ -714,38 +780,30 @@ export class PlayerController {
       const cycleSpeed = this.isSprinting ? 14 : 9;
       this.walkCycle += delta * cycleSpeed;
 
-      // Leg swings
       this.legLeft.rotation.x = Math.sin(this.walkCycle) * 0.65;
       this.legRight.rotation.x = -Math.sin(this.walkCycle) * 0.65;
 
-      // Arm swing when running
       if (!this.isADS) {
         this.armLeft.rotation.x = -Math.sin(this.walkCycle) * 0.45;
       }
     } else {
-      // Idle return
       this.legLeft.rotation.x = THREE.MathUtils.lerp(this.legLeft.rotation.x, 0, delta * 10);
       this.legRight.rotation.x = THREE.MathUtils.lerp(this.legRight.rotation.x, 0, delta * 10);
       this.armLeft.rotation.x = THREE.MathUtils.lerp(this.armLeft.rotation.x, 0, delta * 10);
     }
 
-    // Spine and head pitch tilt
     this.torsoGroup.rotation.x = this.pitch * 0.55;
 
-    // Pickaxe swing
     if (this.pickaxeSwingTimer > 0) {
       this.pickaxeSwingTimer -= delta;
       this.armRight.rotation.x = -0.8 + Math.sin(this.pickaxeSwingTimer * 20) * 0.9;
     } else {
-      // Weapon holding pose: aiming forward
       const targetArmX = -0.25 - this.pitch * 0.4;
       this.armRight.rotation.x = THREE.MathUtils.lerp(this.armRight.rotation.x, targetArmX, delta * 15);
     }
 
-    // Arm recoil recovery
     this.armRight.position.z = THREE.MathUtils.lerp(this.armRight.position.z, 0, delta * 18);
 
-    // Muzzle flash fade
     if (this.muzzleFlashTimer > 0) {
       this.muzzleFlashTimer -= delta;
       if (this.muzzleFlashTimer <= 0) {
@@ -787,7 +845,23 @@ export class PlayerController {
     const finalPitch = this.pitch + this.recoil.currentRecoilPitch;
     const finalYaw = this.yaw + this.recoil.currentRecoilYaw;
 
-    if (!this.isThirdPerson) {
+    const activeWeapon = this.getActiveWeapon();
+    const hasScope = activeWeapon && (activeWeapon.id === 'm416' || activeWeapon.id === 'awm');
+
+    // Scope Overlay Visibility
+    const scopeOverlay = document.getElementById('scope-overlay');
+    const crosshairEl = document.getElementById('crosshair');
+
+    if (this.isADS && hasScope) {
+      if (scopeOverlay) scopeOverlay.classList.remove('hidden');
+      if (crosshairEl) crosshairEl.classList.add('hidden');
+    } else {
+      if (scopeOverlay) scopeOverlay.classList.add('hidden');
+      if (crosshairEl) crosshairEl.classList.remove('hidden');
+    }
+
+    if (!this.isThirdPerson || (this.isADS && activeWeapon?.id === 'awm')) {
+      // 1st Person or Full 8x Sniper Scope View
       this.camera.position.set(
         this.position.x,
         this.position.y + 1.55,
@@ -798,9 +872,9 @@ export class PlayerController {
     } else {
       this.playerMesh.visible = true;
 
-      // Dynamic Third-Person Camera (Over the Shoulder PUBG/Free Fire view)
-      const shoulderX = this.isADS ? 0.45 : 0.65;
-      const camDist = this.isADS ? 1.6 : 2.8;
+      // Dynamic Third-Person Camera
+      const shoulderX = this.isADS ? 0.42 : 0.65;
+      const camDist = this.isADS ? 1.5 : 2.8;
       const camHeight = 1.65;
 
       const offset = new THREE.Vector3(shoulderX, camHeight, camDist);
@@ -811,8 +885,19 @@ export class PlayerController {
       this.camera.rotation.set(finalPitch, finalYaw, 0, 'YXZ');
     }
 
-    const targetFOV = this.isADS ? 40 : 75;
-    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.2);
+    // Zoom FOV for Optical Scopes
+    let targetFOV = 75;
+    if (this.isADS) {
+      if (activeWeapon?.id === 'awm') {
+        targetFOV = 22; // High-power 8x Sniper Scope
+      } else if (activeWeapon?.id === 'm416') {
+        targetFOV = 36; // 4x ACOG Scope
+      } else {
+        targetFOV = 50;
+      }
+    }
+
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.25);
     this.camera.updateProjectionMatrix();
   }
 }

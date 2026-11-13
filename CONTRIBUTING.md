@@ -25,3 +25,4 @@ Thank you for your interest in contributing to **BlockFire: Craft Royale**!
      ```bash
      npm run build
      ```
+

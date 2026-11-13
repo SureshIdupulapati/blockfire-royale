@@ -13,6 +13,25 @@
     <div id="game-container">
       <canvas id="game-canvas"></canvas>
 
+      <!-- TACTICAL SNIPER / ACOG SCOPE OVERLAY -->
+      <div id="scope-overlay" class="scope-overlay hidden">
+        <div class="scope-aperture">
+          <div class="scope-hair scope-h"></div>
+          <div class="scope-hair scope-v"></div>
+          <div class="scope-tick st-1"></div>
+          <div class="scope-tick st-2"></div>
+          <div class="scope-tick st-3"></div>
+          <div class="scope-tick st-4"></div>
+          <div class="scope-center-dot"></div>
+          <div class="scope-lens-ring"></div>
+        </div>
+        <div class="scope-vignette"></div>
+        <div class="scope-data">
+          <span class="scope-zoom-tag">8X TACTICAL SCOPE</span>
+          <span class="scope-range-tag">RANGE: 250m</span>
+        </div>
+      </div>
+
       <!-- CROSSHAIR & HITMARKER -->
       <div id="crosshair-container">
         <div id="crosshair" class="crosshair">
@@ -144,9 +163,9 @@
           </div>
           <div class="slot" data-slot="1">
             <span class="slot-num">2</span>
-            <div class="slot-icon" id="slot-1-icon">⚡</div>
-            <div class="slot-name" id="slot-1-name">MP40</div>
-            <div class="slot-sub" id="slot-1-sub">9mm</div>
+            <div class="slot-icon" id="slot-1-icon">🎯</div>
+            <div class="slot-name" id="slot-1-name">AWM</div>
+            <div class="slot-sub" id="slot-1-sub">.300 Mag</div>
           </div>
           <div class="slot" data-slot="2">
             <span class="slot-num">3</span>
@@ -156,15 +175,21 @@
           </div>
           <div class="slot" data-slot="3">
             <span class="slot-num">4</span>
-            <div class="slot-icon" id="slot-3-icon">🧊</div>
-            <div class="slot-name" id="slot-3-name">GLOO WALL</div>
-            <div class="slot-sub" id="slot-3-sub">Defense</div>
+            <div class="slot-icon" id="slot-3-icon">💣</div>
+            <div class="slot-name" id="slot-3-name">GRENADE</div>
+            <div class="slot-sub" id="slot-3-sub">Explosive</div>
           </div>
           <div class="slot" data-slot="4">
             <span class="slot-num">5</span>
-            <div class="slot-icon" id="slot-4-icon">💉</div>
-            <div class="slot-name" id="slot-4-name">MEDKIT</div>
-            <div class="slot-sub" id="slot-4-sub">+75 HP</div>
+            <div class="slot-icon" id="slot-4-icon">🧊</div>
+            <div class="slot-name" id="slot-4-name">GLOO WALL</div>
+            <div class="slot-sub" id="slot-4-sub">Defense</div>
+          </div>
+          <div class="slot" data-slot="5">
+            <span class="slot-num">6</span>
+            <div class="slot-icon" id="slot-5-icon">💉</div>
+            <div class="slot-name" id="slot-5-name">MEDKIT</div>
+            <div class="slot-sub" id="slot-5-sub">+75 HP</div>
           </div>
         </div>
 
@@ -290,3 +315,4 @@
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
+

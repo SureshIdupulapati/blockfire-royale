@@ -10,9 +10,11 @@ describe('Combat & Weapons System', () => {
     expect(WEAPON_REGISTRY.mp40).toBeDefined();
     expect(WEAPON_REGISTRY.awm).toBeDefined();
     expect(WEAPON_REGISTRY.pickaxe).toBeDefined();
+    expect(WEAPON_REGISTRY.frag_grenade).toBeDefined();
     expect(WEAPON_REGISTRY.gloo_wall).toBeDefined();
 
     expect(WEAPON_REGISTRY.awm.category).toBe(WeaponCategory.SNIPER);
+    expect(WEAPON_REGISTRY.frag_grenade.category).toBe(WeaponCategory.TACTICAL);
     expect(WEAPON_REGISTRY.m416.category).toBe(WeaponCategory.ASSAULT_RIFLE);
     expect(WEAPON_REGISTRY.pickaxe.category).toBe(WeaponCategory.MELEE);
   });
@@ -23,6 +25,15 @@ describe('Combat & Weapons System', () => {
 
     expect(awm.damage).toBeGreaterThan(mp40.damage * 4);
     expect(mp40.fireRate).toBeGreaterThan(awm.fireRate * 5);
+  });
+
+  describe('Frag Grenades', () => {
+    it('should configure high explosive damage and blast radius', () => {
+      const grenade = WEAPON_REGISTRY.frag_grenade;
+      expect(grenade.damage).toBe(160);
+      expect(grenade.icon).toBe('💣');
+      expect(grenade.range).toBeGreaterThanOrEqual(35);
+    });
   });
 
   describe('RecoilSystem', () => {

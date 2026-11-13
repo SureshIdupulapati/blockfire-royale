@@ -81,3 +81,4 @@ Each bot executes a state machine evaluated on every frame:
   - Fires in bursts according to weapon fire rates.
   - Performs lateral strafing to evade incoming fire.
 - **Free Fire Gloo Wall Response**: When taking sudden damage from an open angle, if the bot carries Gloo Grenades, it immediately places a defensive Gloo Wall oriented toward the attacker's trajectory, breaking line-of-sight and retreating to heal.
+

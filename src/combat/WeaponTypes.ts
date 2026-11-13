@@ -121,6 +121,26 @@ export const WEAPON_REGISTRY: Record<string, WeaponConfig> = {
     bulletSpeed: 180,
     soundType: 'shotgun'
   },
+  frag_grenade: {
+    id: 'frag_grenade',
+    name: 'M67 Frag Grenade',
+    category: WeaponCategory.TACTICAL,
+    damage: 160,
+    headshotMultiplier: 1,
+    fireRate: 0.8,
+    magazineSize: 1,
+    reserveAmmo: 4,
+    reloadTime: 1.0,
+    spread: 0,
+    recoilVertical: 0.02,
+    recoilHorizontal: 0,
+    range: 40,
+    ammoType: AmmoType.NONE,
+    icon: '💣',
+    isAutomatic: false,
+    bulletSpeed: 24,
+    soundType: 'gloo'
+  },
   gloo_wall: {
     id: 'gloo_wall',
     name: 'Gloo Wall Capsule',
