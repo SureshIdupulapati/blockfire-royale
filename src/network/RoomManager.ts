@@ -22,11 +22,11 @@ export class RoomManager {
   public readonly publicLiveHost: string = 'https://sureshidupulapati.github.io/blockfire-royale';
 
   constructor() {
-    this.checkUrlForRoomInvite();
+    // Note: URL invites are checked explicitly after event listeners are bound
   }
 
-  private checkUrlForRoomInvite(): void {
-    if (typeof window === 'undefined') return;
+  public checkUrlForRoomInvite(): boolean {
+    if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
     const roomId = params.get('room');
     const mode = (params.get('mode') as GameMode) || GameMode.DUEL_1V1;
@@ -34,7 +34,9 @@ export class RoomManager {
 
     if (roomId) {
       this.joinRoom(roomId, mode, teamParam);
+      return true;
     }
+    return false;
   }
 
   public createRoom(mode: GameMode = GameMode.CLASH_2V2, targetKills: number = 5): RoomConfig {
@@ -109,27 +111,81 @@ export class RoomManager {
     return this.currentRoom;
   }
 
-  public joinRoom(roomId: string, mode: GameMode = GameMode.CLASH_2V2, preferredTeam: Team = 'red'): void {
+  public joinRoom(roomId: string, mode: GameMode = GameMode.CLASH_2V2, preferredTeam: Team = 'red'): RoomConfig {
     this.isHost = false;
     this.preferredTeam = preferredTeam;
-    this.initNetworking(roomId);
 
-    // Send join request via WebSocket and BroadcastChannel
-    const joinMsg = {
-      type: 'PLAYER_JOIN_REQUEST',
-      roomId,
-      payload: {
-        name: 'Player 2 (Friend)',
-        preferredTeam
-      }
+    let formattedId = roomId.trim().toUpperCase();
+    if (!formattedId.startsWith('ROOM-')) {
+      formattedId = 'ROOM-' + formattedId;
+    }
+
+    const slots: RoomSlot[] = [];
+    if (mode === GameMode.DUEL_1V1) {
+      slots.push({
+        slotId: 0,
+        team: 'blue',
+        name: 'Player 1 (Host)',
+        isHuman: true,
+        isHost: true,
+        isReady: true
+      });
+      slots.push({
+        slotId: 1,
+        team: 'red',
+        name: 'You (Friend)',
+        isHuman: true,
+        isHost: false,
+        isReady: true
+      });
+      this.localPlayerSlot = 1;
+    } else {
+      slots.push({
+        slotId: 0,
+        team: 'blue',
+        name: 'Player 1 (Host)',
+        isHuman: true,
+        isHost: true,
+        isReady: true
+      });
+      slots.push({
+        slotId: 1,
+        team: 'blue',
+        name: preferredTeam === 'blue' ? 'You (Friend)' : 'Bot_Ally',
+        isHuman: preferredTeam === 'blue',
+        isHost: false,
+        isReady: true
+      });
+      slots.push({
+        slotId: 2,
+        team: 'red',
+        name: preferredTeam === 'red' ? 'You (Friend)' : 'Bot_Viper',
+        isHuman: preferredTeam === 'red',
+        isHost: false,
+        isReady: true
+      });
+      slots.push({
+        slotId: 3,
+        team: 'red',
+        name: 'Bot_Ghost',
+        isHuman: false,
+        isHost: false,
+        isReady: true
+      });
+      this.localPlayerSlot = preferredTeam === 'blue' ? 1 : 2;
+    }
+
+    this.currentRoom = {
+      roomId: formattedId,
+      mode,
+      targetKills: 5,
+      autoFillBots: true,
+      slots
     };
 
-    this.sendNetworkMessage(joinMsg);
-
-    if (!this.currentRoom) {
-      this.currentRoom = this.createRoom(mode);
-      this.currentRoom.roomId = roomId;
-    }
+    this.initNetworking(formattedId);
+    this.onRoomUpdated(this.currentRoom);
+    return this.currentRoom;
   }
 
   private initNetworking(roomId: string): void {

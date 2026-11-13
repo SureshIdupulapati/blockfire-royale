@@ -324,6 +324,84 @@ class GameApp {
     if (btnRestartLose) {
       btnRestartLose.addEventListener('click', () => window.location.reload());
     }
+
+    // Secret Code Join Handler
+    const joinCodeInput = document.getElementById('join-code-input') as HTMLInputElement | null;
+    const btnJoinCode = document.getElementById('btn-join-code');
+    const joinFeedback = document.getElementById('join-feedback');
+
+    const handleJoinByCode = () => {
+      if (!joinCodeInput) return;
+      const rawCode = joinCodeInput.value.trim();
+      if (!rawCode) {
+        if (joinFeedback) {
+          joinFeedback.className = 'join-feedback error';
+          joinFeedback.innerText = '⚠️ Please enter a room code (e.g. 6643 or ROOM-6643)';
+          joinFeedback.classList.remove('hidden');
+        }
+        return;
+      }
+
+      let code = rawCode.toUpperCase();
+      if (!code.startsWith('ROOM-')) {
+        code = 'ROOM-' + code;
+      }
+
+      this.roomManager.joinRoom(code, GameMode.DUEL_1V1, 'red');
+
+      if (joinFeedback) {
+        joinFeedback.className = 'join-feedback success';
+        joinFeedback.innerText = `✅ Joining ${code}...`;
+        joinFeedback.classList.remove('hidden');
+      }
+
+      tabs.forEach(t => {
+        if (t.getAttribute('data-mode') === GameMode.DUEL_1V1) {
+          t.classList.add('active');
+        } else {
+          t.classList.remove('active');
+        }
+      });
+      if (roomPanel) roomPanel.classList.remove('hidden');
+      if (startBtn) {
+        startBtn.innerText = '🟢 READY IN ROOM (WAITING FOR HOST TO START)';
+      }
+    };
+
+    if (btnJoinCode) {
+      btnJoinCode.addEventListener('click', handleJoinByCode);
+    }
+    if (joinCodeInput) {
+      joinCodeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleJoinByCode();
+      });
+    }
+
+    // Automatic URL invite detector
+    const hasInvite = this.roomManager.checkUrlForRoomInvite();
+    if (hasInvite && this.roomManager.currentRoom) {
+      const mode = this.roomManager.currentRoom.mode;
+      this.selectedMode = mode;
+
+      tabs.forEach(t => {
+        if (t.getAttribute('data-mode') === mode) {
+          t.classList.add('active');
+        } else {
+          t.classList.remove('active');
+        }
+      });
+
+      if (roomPanel) roomPanel.classList.remove('hidden');
+      if (startBtn) {
+        startBtn.innerText = '🟢 READY IN ROOM (WAITING FOR HOST TO START)';
+      }
+
+      if (joinFeedback) {
+        joinFeedback.className = 'join-feedback success';
+        joinFeedback.innerText = `✅ Joined Room ${this.roomManager.currentRoom.roomId} as Team Red!`;
+        joinFeedback.classList.remove('hidden');
+      }
+    }
   }
 
   private startMatch(): void {

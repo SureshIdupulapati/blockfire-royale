@@ -247,6 +247,19 @@
             <button class="mode-tab" data-mode="CLASH_2V2">2v2 SQUAD CLASH</button>
           </div>
 
+          <!-- QUICK JOIN BY SECRET CODE -->
+          <div class="join-room-card">
+            <div class="join-card-header">
+              <span class="join-icon">🔑</span>
+              <span class="join-title">JOIN FRIEND'S ROOM WITH SECRET CODE:</span>
+            </div>
+            <div class="join-controls">
+              <input type="text" id="join-code-input" class="join-input" placeholder="Enter 4-Digit Code (e.g. 6643 or ROOM-6643)" maxlength="15" />
+              <button id="btn-join-code" class="btn-join-action">⚔️ JOIN ROOM</button>
+            </div>
+            <div id="join-feedback" class="join-feedback hidden"></div>
+          </div>
+
           <!-- CUSTOM ROOM & FRIENDS / BOTS PANEL -->
           <div id="room-panel" class="room-panel hidden">
             <div class="room-header">
