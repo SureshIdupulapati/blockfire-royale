@@ -123,6 +123,7 @@ class GameApp {
       this.particles,
       this.roomManager
     );
+    this.remotePlayerManager.localPlayer = this.player;
 
     // Register weapon check for remote players too
     const baseWeaponFired = this.player.onWeaponFired;
@@ -527,7 +528,7 @@ class GameApp {
   }
 
   private checkMatchConditions(): void {
-    // Defeat
+    // 1. Defeat: Local player health <= 0
     if (this.player.vitals.health <= 0 && this.gameState !== GameState.DEFEAT) {
       this.gameState = GameState.DEFEAT;
       document.exitPointerLock();
@@ -539,29 +540,65 @@ class GameApp {
         this.botManager.totalDamageDealt,
         this.selectedMode === GameMode.BATTLE_ROYALE ? 'Enemy Combatant' : 'Team Red Rival'
       );
+
+      if (this.roomManager.currentRoom) {
+        const killerTeam = this.roomManager.isHost ? 'red' : 'blue';
+        this.roomManager.sendNetworkMessage({
+          type: 'PLAYER_ELIMINATED',
+          slotId: this.roomManager.localPlayerSlot,
+          killerTeam
+        });
+      }
       return;
     }
 
-    // Victory: All opponents eliminated!
-    const opponentsLeft = this.botManager.getAliveOpponentCount();
-    if (opponentsLeft === 0 && this.gameState !== GameState.VICTORY) {
-      this.gameState = GameState.VICTORY;
-      document.exitPointerLock();
+    // 2. Victory checks:
+    const matchElapsed = Date.now() - this.matchStartTime;
+    // Guard: Prevent instant 00:00 false victory before match has actually started running
+    if (matchElapsed < 3000) return;
 
-      this.sound.playBooyahFanfare();
+    if (this.selectedMode === GameMode.BATTLE_ROYALE) {
+      const opponentsLeft = this.botManager.getAliveOpponentCount();
+      if (opponentsLeft === 0 && this.gameState !== GameState.VICTORY) {
+        this.triggerVictory();
+      }
+    } else if (this.selectedMode === GameMode.DUEL_1V1 || this.selectedMode === GameMode.CLASH_2V2) {
+      const myTeam = this.roomManager.isHost ? 'blue' : this.roomManager.preferredTeam;
+      const aliveBotOpponents = this.botManager.getAliveOpponentCount();
+      const aliveHumanOpponents = this.remotePlayerManager.getAliveOpponentCount(myTeam);
+      const totalAliveOpponents = aliveBotOpponents + aliveHumanOpponents;
 
-      const elapsedSecs = Math.floor((Date.now() - this.matchStartTime) / 1000);
-      const mins = Math.floor(elapsedSecs / 60);
-      const secs = elapsedSecs % 60;
-      const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-
-      this.uiManager.showBooyahScreen(
-        this.botManager.playerKills,
-        this.botManager.totalDamageDealt,
-        timeStr,
-        this.blocksPlacedCount
-      );
+      if (this.roomManager.hasHumanOpponents()) {
+        // If human opponents are present in the match, victory only triggers when human opponents are eliminated
+        if (totalAliveOpponents === 0 && this.remotePlayerManager.peers.size > 0 && this.gameState !== GameState.VICTORY) {
+          this.triggerVictory();
+        }
+      } else {
+        // Bot rival arena: victory when all bots eliminated
+        if (totalAliveOpponents === 0 && this.gameState !== GameState.VICTORY) {
+          this.triggerVictory();
+        }
+      }
     }
+  }
+
+  private triggerVictory(): void {
+    this.gameState = GameState.VICTORY;
+    document.exitPointerLock();
+
+    this.sound.playBooyahFanfare();
+
+    const elapsedSecs = Math.floor((Date.now() - this.matchStartTime) / 1000);
+    const mins = Math.floor(elapsedSecs / 60);
+    const secs = elapsedSecs % 60;
+    const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+    this.uiManager.showBooyahScreen(
+      this.botManager.playerKills,
+      this.botManager.totalDamageDealt,
+      timeStr,
+      this.blocksPlacedCount
+    );
   }
 }
 

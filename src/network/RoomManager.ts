@@ -389,6 +389,13 @@ export class RoomManager {
     }
   }
 
+  public hasHumanOpponents(): boolean {
+    if (!this.currentRoom) return false;
+    const myTeam = this.isHost ? 'blue' : this.preferredTeam;
+    const enemyTeam = myTeam === 'blue' ? 'red' : 'blue';
+    return this.currentRoom.slots.some(s => s.team === enemyTeam && s.isHuman);
+  }
+
   public broadcastRoomSync(): void {
     if (this.currentRoom) {
       this.sendNetworkMessage({

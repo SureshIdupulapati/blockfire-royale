@@ -169,6 +169,7 @@ export class RemotePlayerManager {
   private roomManager: RoomManager;
 
   public peers: Map<number, RemotePlayer> = new Map();
+  public localPlayer: PlayerController | null = null;
   private syncTimer: number = 0;
 
   constructor(
@@ -185,6 +186,17 @@ export class RemotePlayerManager {
     this.roomManager.onRemotePlayerUpdate = (data: any) => {
       this.handlePeerMessage(data);
     };
+  }
+
+  public getAliveOpponentCount(myTeam: 'blue' | 'red'): number {
+    const enemyTeam = myTeam === 'blue' ? 'red' : 'blue';
+    let count = 0;
+    for (const [, peer] of this.peers) {
+      if (peer.team === enemyTeam && peer.isAlive) {
+        count++;
+      }
+    }
+    return count;
   }
 
   public getOrCreatePeer(slotId: number, name: string, team: 'blue' | 'red'): RemotePlayer {
@@ -233,9 +245,17 @@ export class RemotePlayerManager {
       }
     } else if (data.type === 'DAMAGE_EVENT') {
       // Check if this damage event was targeted at the local player
-      if (data.targetSlot === this.roomManager.localPlayerSlot) {
+      if (data.targetSlot === this.roomManager.localPlayerSlot && this.localPlayer) {
+        this.localPlayer.applyDamage(data.damage, data.isHeadshot);
         this.sound.playHitmarker(false);
       }
+    } else if (data.type === 'PLAYER_ELIMINATED') {
+      const peer = this.peers.get(data.slotId);
+      if (peer) {
+        peer.isAlive = false;
+        peer.mesh.visible = false;
+      }
+      this.roomManager.registerKill(data.killerTeam);
     }
   }
 
@@ -331,6 +351,14 @@ export class RemotePlayerManager {
       );
 
       // Send damage event to remote player
+      closestPeer.health -= dmg;
+      if (closestPeer.health <= 0) {
+        closestPeer.isAlive = false;
+        closestPeer.mesh.visible = false;
+        const myTeam = this.roomManager.isHost ? 'blue' : this.roomManager.preferredTeam;
+        this.roomManager.registerKill(myTeam);
+      }
+
       this.roomManager.sendNetworkMessage({
         type: 'DAMAGE_EVENT',
         targetSlot: closestPeer.slotId,
