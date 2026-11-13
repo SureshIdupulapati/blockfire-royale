@@ -270,3 +270,4 @@ export class GrenadeManager {
     this.trajectoryLine.computeLineDistances();
   }
 }
+

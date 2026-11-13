@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { VoxelWorld } from '../voxel/VoxelWorld';
 import { raycastVoxel } from '../voxel/VoxelRaycast';
-import { BlockType, WeaponConfig } from '../types';
+import { BlockType, Team, WeaponConfig } from '../types';
 import { WEAPON_REGISTRY } from '../combat/WeaponTypes';
 import { SoundSynthesizer } from '../audio/SoundSynthesizer';
 import { ParticleManager } from '../combat/ParticleManager';
@@ -20,6 +20,7 @@ export enum BotState {
 export class BotAI {
   public id: string;
   public name: string;
+  public team: Team;
   public position: THREE.Vector3;
   public velocity: THREE.Vector3 = new THREE.Vector3();
   public yaw: number = 0;
@@ -56,10 +57,12 @@ export class BotAI {
     sound: SoundSynthesizer,
     particles: ParticleManager,
     glooManager: GlooWallManager,
-    zoneManager: ZoneManager
+    zoneManager: ZoneManager,
+    team: Team = 'red'
   ) {
     this.id = id;
     this.name = name;
+    this.team = team;
     this.position = startPos.clone();
     this.world = world;
     this.sound = sound;
@@ -67,13 +70,13 @@ export class BotAI {
     this.glooManager = glooManager;
     this.zoneManager = zoneManager;
 
-    // Pick weapon variant
     const weapons = [WEAPON_REGISTRY.m416, WEAPON_REGISTRY.ak47, WEAPON_REGISTRY.mp40, WEAPON_REGISTRY.awm];
     this.weapon = weapons[Math.floor(Math.random() * weapons.length)];
 
-    // Build Bot 3D Avatar
+    // Build Bot 3D Avatar (Team colored)
     this.mesh = new THREE.Group();
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0xd97706 }); // Orange tactical suit
+    const teamColor = team === 'blue' ? 0x2563eb : 0xd97706;
+    const bodyMat = new THREE.MeshLambertMaterial({ color: teamColor });
     const skinMat = new THREE.MeshLambertMaterial({ color: 0xd1d5db });
     const vestMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
 
@@ -81,6 +84,12 @@ export class BotAI {
     const bodyMesh = new THREE.Mesh(bodyGeo, vestMat);
     bodyMesh.position.y = 0.9;
     this.mesh.add(bodyMesh);
+
+    // Torso team color stripes
+    const stripeGeo = new THREE.BoxGeometry(0.57, 0.2, 0.32);
+    const stripeMesh = new THREE.Mesh(stripeGeo, bodyMat);
+    stripeMesh.position.y = 0.9;
+    this.mesh.add(stripeMesh);
 
     const headGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
     this.headMesh = new THREE.Mesh(headGeo, skinMat);
@@ -96,8 +105,9 @@ export class BotAI {
 
     // Parachute
     this.parachuteMesh = new THREE.Group();
+    const canopyColor = team === 'blue' ? 0x0284c7 : 0xdc2626;
     const canopyGeo = new THREE.CylinderGeometry(2.2, 0.6, 1.1, 8, 1, true);
-    const canopyMat = new THREE.MeshLambertMaterial({ color: 0xdc2626, side: THREE.DoubleSide });
+    const canopyMat = new THREE.MeshLambertMaterial({ color: canopyColor, side: THREE.DoubleSide });
     const canopy = new THREE.Mesh(canopyGeo, canopyMat);
     canopy.position.y = 3.0;
     this.parachuteMesh.add(canopy);
@@ -116,7 +126,6 @@ export class BotAI {
 
     let dmg = amount * (isHeadshot ? 2.0 : 1.0);
 
-    // Armor absorption
     if (this.armor > 0) {
       const absorbed = dmg * 0.5;
       if (this.armor >= absorbed) {
@@ -131,13 +140,12 @@ export class BotAI {
     this.health -= dmg;
     this.particles.spawnBlood(this.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
 
-    // Tactical Free Fire reaction: if damaged from open angle, deploy Gloo Wall!
     if (this.health > 0 && this.glooGrenades > 0 && Math.random() < 0.75) {
       const dirToAttacker = attackerPos.clone().sub(this.position).normalize();
       this.glooManager.deployGlooWall(this.position, dirToAttacker);
       this.glooGrenades--;
       this.state = BotState.RETREATING;
-      this.stateTimer = 4.0;
+      this.stateTimer = 3.5;
     }
 
     if (this.health <= 0) {
@@ -177,7 +185,7 @@ export class BotAI {
         break;
     }
 
-    // Check Zone Damage
+    // Zone Damage
     if (this.zoneManager.isOutsideZone(this.position)) {
       const dmg = this.zoneManager.getCurrentDamagePerSecond() * delta;
       this.health -= dmg;
@@ -205,13 +213,12 @@ export class BotAI {
   }
 
   private updatePatrol(delta: number, playerPos: THREE.Vector3, allBots: BotAI[]): void {
-    // Check if safe zone is shrinking away
     if (this.zoneManager.isOutsideZone(this.position)) {
       this.state = BotState.MOVE_TO_ZONE;
       return;
     }
 
-    // Scan for targets: player or enemy bots
+    // Scan for enemies
     const target = this.scanForEnemies(playerPos, allBots);
     if (target) {
       this.currentCombatTarget = target;
@@ -219,7 +226,16 @@ export class BotAI {
       return;
     }
 
-    // Move toward patrol point
+    // If Team Blue (Ally): Follow near player!
+    if (this.team === 'blue') {
+      const distToPlayer = this.position.distanceTo(playerPos);
+      if (distToPlayer > 12.0) {
+        this.moveTowards(playerPos, 6.0, delta);
+        return;
+      }
+    }
+
+    // Normal patrol
     this.moveTowards(this.targetPosition, 4.5, delta);
 
     if (this.position.distanceTo(this.targetPosition) < 2.0 || this.stateTimer <= 0) {
@@ -228,7 +244,6 @@ export class BotAI {
   }
 
   private updateMoveToZone(delta: number, playerPos: THREE.Vector3, allBots: BotAI[]): void {
-    // Move toward center of safe zone
     const center = this.zoneManager.currentCenter;
     const zonePos = new THREE.Vector3(center.x, this.position.y, center.y);
 
@@ -240,9 +255,8 @@ export class BotAI {
       return;
     }
 
-    // Still defend if attacked
     const target = this.scanForEnemies(playerPos, allBots);
-    if (target && this.position.distanceTo(target.position) < 20) {
+    if (target && this.position.distanceTo(target.position) < 25) {
       this.currentCombatTarget = target;
       this.state = BotState.COMBAT;
     }
@@ -261,17 +275,15 @@ export class BotAI {
     const targetPos = this.currentCombatTarget.position;
     const dist = this.position.distanceTo(targetPos);
 
-    if (dist > 50 || (this.currentCombatTarget.entity && !this.currentCombatTarget.entity.isAlive)) {
+    if (dist > 55 || (this.currentCombatTarget.entity && !this.currentCombatTarget.entity.isAlive)) {
       this.currentCombatTarget = null;
       this.state = BotState.PATROL;
       return;
     }
 
-    // Face target
     const dir = targetPos.clone().sub(this.position).setY(0).normalize();
     this.yaw = Math.atan2(-dir.x, -dir.z);
 
-    // Tactical strafing
     this.strafeTimer -= delta;
     if (this.strafeTimer <= 0) {
       this.strafeDir *= -1;
@@ -281,16 +293,13 @@ export class BotAI {
     const right = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(this.strafeDir);
     this.position.addScaledVector(right, delta * 2.5);
 
-    // Keep on top of voxel terrain
     const groundY = this.world.getHighestY(Math.floor(this.position.x), Math.floor(this.position.z)) + 1;
     this.position.y = THREE.MathUtils.lerp(this.position.y, groundY, delta * 10);
 
-    // Shoot in bursts
     if (this.shootCooldown <= 0) {
-      const isHeadshot = Math.random() < 0.2; // 20% headshot accuracy
+      const isHeadshot = Math.random() < 0.2;
       this.sound.playGunshot(this.weapon.soundType as any);
 
-      // Bullet tracer
       const muzzle = this.position.clone().add(new THREE.Vector3(0.3, 1.2, 0));
       this.particles.createBulletTracer(muzzle, targetPos.clone().add(new THREE.Vector3(0, 1.2, 0)), this.weapon.bulletSpeed);
 
@@ -310,21 +319,26 @@ export class BotAI {
     playerPos: THREE.Vector3,
     allBots: BotAI[]
   ): { position: THREE.Vector3; isPlayer: boolean; entity?: any } | null {
-    // 1. Check player distance and line of sight
-    const distToPlayer = this.position.distanceTo(playerPos);
-    if (distToPlayer < 40) {
-      const dir = playerPos.clone().sub(this.position).normalize();
-      const hit = raycastVoxel(this.world, this.position.clone().setY(this.position.y + 1.2), dir, distToPlayer);
-      if (!hit.hit) {
-        return { position: playerPos, isPlayer: true };
+    // 1. If Bot is on Team Red, it can target Player (Team Blue)
+    if (this.team === 'red') {
+      const distToPlayer = this.position.distanceTo(playerPos);
+      if (distToPlayer < 45) {
+        const dir = playerPos.clone().sub(this.position).normalize();
+        const hit = raycastVoxel(this.world, this.position.clone().setY(this.position.y + 1.2), dir, distToPlayer);
+        if (!hit.hit) {
+          return { position: playerPos, isPlayer: true };
+        }
       }
     }
 
-    // 2. Check other bots
+    // 2. Scan other bots (target opposing team only!)
     for (const other of allBots) {
       if (other.id === this.id || !other.isAlive) continue;
+      // Friendly fire prevention: do not target same team!
+      if (other.team === this.team) continue;
+
       const d = this.position.distanceTo(other.position);
-      if (d < 30) {
+      if (d < 35) {
         return { position: other.position, isPlayer: false, entity: other };
       }
     }
@@ -341,7 +355,6 @@ export class BotAI {
 
     this.position.addScaledVector(dir, speed * delta);
 
-    // Voxel height adjustment & step climbing
     const groundY = this.world.getHighestY(Math.floor(this.position.x), Math.floor(this.position.z)) + 1;
     this.position.y = THREE.MathUtils.lerp(this.position.y, groundY, delta * 12);
   }
@@ -357,4 +370,3 @@ export class BotAI {
     this.stateTimer = 5 + Math.random() * 5;
   }
 }
-

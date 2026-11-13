@@ -6,7 +6,7 @@ import { ParticleManager } from '../combat/ParticleManager';
 import { GlooWallManager } from '../freefire/GlooWallManager';
 import { ZoneManager } from '../zone/ZoneManager';
 import { PlayerController } from '../player/PlayerController';
-import { WeaponConfig, KillFeedEvent } from '../types';
+import { WeaponConfig, KillFeedEvent, GameMode, RoomConfig } from '../types';
 
 export class BotManager {
   private scene: THREE.Scene;
@@ -17,7 +17,7 @@ export class BotManager {
   private zoneManager: ZoneManager;
 
   public bots: BotAI[] = [];
-  public totalParticipants: number = 15; // 1 player + 14 bots
+  public totalParticipants: number = 15;
   public aliveCount: number = 15;
   public playerKills: number = 0;
   public totalDamageDealt: number = 0;
@@ -47,32 +47,118 @@ export class BotManager {
     this.zoneManager = zoneManager;
   }
 
-  public spawnBots(): void {
+  public spawnBots(mode: GameMode = GameMode.BATTLE_ROYALE, roomConfig?: RoomConfig | null): void {
+    // Clear old bot meshes
+    for (const b of this.bots) {
+      this.scene.remove(b.mesh);
+    }
     this.bots = [];
-    this.aliveCount = this.botNames.length + 1;
 
-    for (let i = 0; i < this.botNames.length; i++) {
-      const name = this.botNames[i];
-      // Random coordinates across the massive island
-      const angle = (i / this.botNames.length) * Math.PI * 2;
-      const radius = 25 + Math.random() * 45;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      const startPos = new THREE.Vector3(x, 48 + Math.random() * 8, z);
+    if (mode === GameMode.DUEL_1V1) {
+      // 1v1 DUEL: Player vs 1 Bot Rival
+      this.totalParticipants = 2;
+      this.aliveCount = 2;
 
-      const bot = new BotAI(
-        `bot-${i}`,
-        name,
-        startPos,
+      const rivalBot = new BotAI(
+        'bot-duel',
+        'Bot_Rival',
+        new THREE.Vector3(25, 45, 25),
         this.world,
         this.sound,
         this.particles,
         this.glooManager,
-        this.zoneManager
+        this.zoneManager,
+        'red'
       );
+      this.scene.add(rivalBot.mesh);
+      this.bots.push(rivalBot);
 
-      this.scene.add(bot.mesh);
-      this.bots.push(bot);
+    } else if (mode === GameMode.CLASH_2V2) {
+      // 2v2 CLASH: 2 on Blue (Player + Ally) vs 2 on Red (Enemies)
+      this.totalParticipants = 4;
+      this.aliveCount = 4;
+
+      // 1. Bot Ally on Team Blue (if slot is not human friend)
+      const allySlot = roomConfig?.slots.find(s => s.slotId === 1);
+      if (!allySlot || !allySlot.isHuman) {
+        const allyBot = new BotAI(
+          'bot-ally',
+          'Bot_Ally',
+          new THREE.Vector3(4, 48, 4), // Spawns right next to player
+          this.world,
+          this.sound,
+          this.particles,
+          this.glooManager,
+          this.zoneManager,
+          'blue'
+        );
+        this.scene.add(allyBot.mesh);
+        this.bots.push(allyBot);
+      }
+
+      // 2. Opponents on Team Red
+      const opp1Slot = roomConfig?.slots.find(s => s.slotId === 2);
+      if (!opp1Slot || !opp1Slot.isHuman) {
+        const enemy1 = new BotAI(
+          'bot-enemy-1',
+          'Bot_Viper',
+          new THREE.Vector3(-25, 48, 25),
+          this.world,
+          this.sound,
+          this.particles,
+          this.glooManager,
+          this.zoneManager,
+          'red'
+        );
+        this.scene.add(enemy1.mesh);
+        this.bots.push(enemy1);
+      }
+
+      const opp2Slot = roomConfig?.slots.find(s => s.slotId === 3);
+      if (!opp2Slot || !opp2Slot.isHuman) {
+        const enemy2 = new BotAI(
+          'bot-enemy-2',
+          'Bot_Ghost',
+          new THREE.Vector3(-25, 48, -25),
+          this.world,
+          this.sound,
+          this.particles,
+          this.glooManager,
+          this.zoneManager,
+          'red'
+        );
+        this.scene.add(enemy2.mesh);
+        this.bots.push(enemy2);
+      }
+
+    } else {
+      // CLASSIC BATTLE ROYALE (15 Players)
+      this.totalParticipants = this.botNames.length + 1;
+      this.aliveCount = this.totalParticipants;
+
+      for (let i = 0; i < this.botNames.length; i++) {
+        const name = this.botNames[i];
+        const angle = (i / this.botNames.length) * Math.PI * 2;
+        const radius = 25 + Math.random() * 45;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        const startPos = new THREE.Vector3(x, 48 + Math.random() * 8, z);
+
+        const bot = new BotAI(
+          `bot-${i}`,
+          name,
+          startPos,
+          this.world,
+          this.sound,
+          this.particles,
+          this.glooManager,
+          this.zoneManager,
+          'red'
+        );
+
+        this.scene.add(bot.mesh);
+        this.bots.push(bot);
+      }
     }
 
     this.onAliveCountChanged(this.aliveCount);
@@ -98,8 +184,9 @@ export class BotManager {
 
     for (const bot of this.bots) {
       if (!bot.isAlive) continue;
+      // Friendly fire check: Player is Team Blue, cannot shoot Team Blue bots!
+      if (bot.team === 'blue') continue;
 
-      // Body bounding box
       const bodyBox = new THREE.Box3(
         bot.position.clone().add(new THREE.Vector3(-0.4, 0, -0.4)),
         bot.position.clone().add(new THREE.Vector3(0.4, 1.8, 0.4))
@@ -111,17 +198,14 @@ export class BotManager {
         if (dist < closestDist) {
           closestDist = dist;
           closestBot = bot;
-          // Check if hit was near head level (y > 1.3 relative to bot feet)
           isHeadshotHit = (hitPoint.y - bot.position.y) >= 1.35;
         }
       }
     }
 
     if (closestBot) {
-      // Audio confirmation
       this.sound.playHitmarker(isHeadshotHit);
 
-      // Trigger UI hitmarker
       const hmEl = document.getElementById('hitmarker');
       if (hmEl) {
         hmEl.className = `hitmarker active ${isHeadshotHit ? 'headshot' : ''}`;
@@ -134,7 +218,6 @@ export class BotManager {
       const totalDamage = weapon.damage * multiplier;
       this.totalDamageDealt += totalDamage;
 
-      // Floating damage number
       this.particles.spawnDamageNumber(
         totalDamage,
         closestBot.position.clone().add(new THREE.Vector3(0, 1.5, 0)),
@@ -143,12 +226,10 @@ export class BotManager {
       );
 
       closestBot.takeDamage(weapon.damage, player.position, isHeadshotHit, () => {
-        // Bot killed by player!
         this.playerKills++;
         this.aliveCount = Math.max(1, this.aliveCount - 1);
         this.onAliveCountChanged(this.aliveCount);
 
-        // Free Fire reward: instant Gloo Wall drop & Adrenaline shield refill!
         player.vitals.glooCount += 2;
         player.vitals.armor = Math.min(player.vitals.maxArmor, player.vitals.armor + 50);
 
@@ -170,7 +251,6 @@ export class BotManager {
       if (!bot.isAlive) continue;
 
       bot.update(delta, player.position, this.bots, (shooter, targetPos, isHeadshot) => {
-        // If bot shoots at player
         if (shooter.currentCombatTarget && shooter.currentCombatTarget.isPlayer) {
           player.applyDamage(shooter.weapon.damage * (isHeadshot ? 1.5 : 1.0), isHeadshot);
           player.sound.playHitmarker(false);
@@ -187,7 +267,6 @@ export class BotManager {
             });
           }
         } else if (shooter.currentCombatTarget && shooter.currentCombatTarget.entity) {
-          // Bot shoots other bot
           const victimBot = shooter.currentCombatTarget.entity as BotAI;
           victimBot.takeDamage(shooter.weapon.damage, shooter.position, isHeadshot, () => {
             this.aliveCount = Math.max(1, this.aliveCount - 1);
@@ -211,5 +290,8 @@ export class BotManager {
   public getAliveBotCount(): number {
     return this.bots.filter(b => b.isAlive).length;
   }
-}
 
+  public getAliveOpponentCount(): number {
+    return this.bots.filter(b => b.isAlive && b.team === 'red').length;
+  }
+}

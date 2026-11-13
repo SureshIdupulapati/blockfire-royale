@@ -2,10 +2,36 @@ import * as THREE from 'three';
 
 export enum GameState {
   LOBBY = 'LOBBY',
+  ROOM_LOBBY = 'ROOM_LOBBY',
   AIRBORNE = 'AIRBORNE',
   PLAYING = 'PLAYING',
   VICTORY = 'VICTORY',
   DEFEAT = 'DEFEAT'
+}
+
+export enum GameMode {
+  BATTLE_ROYALE = 'BATTLE_ROYALE',
+  DUEL_1V1 = 'DUEL_1V1',
+  CLASH_2V2 = 'CLASH_2V2'
+}
+
+export type Team = 'blue' | 'red';
+
+export interface RoomSlot {
+  slotId: number;
+  team: Team;
+  name: string;
+  isHuman: boolean;
+  isHost: boolean;
+  isReady: boolean;
+}
+
+export interface RoomConfig {
+  roomId: string;
+  mode: GameMode;
+  targetKills: number;
+  autoFillBots: boolean;
+  slots: RoomSlot[];
 }
 
 export enum BlockType {

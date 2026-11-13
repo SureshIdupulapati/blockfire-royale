@@ -71,6 +71,19 @@
           <div id="zone-warning" class="zone-warning hidden">OUTSIDE SAFE ZONE - TAKING DAMAGE!</div>
         </div>
 
+        <!-- 1v1 / 2v2 TEAM CLASH SCOREBOARD -->
+        <div id="clash-scoreboard" class="clash-scoreboard hidden">
+          <div class="team-score-box team-blue">
+            <span class="team-name">TEAM BLUE</span>
+            <span id="blue-score" class="score-val">0</span>
+          </div>
+          <div class="score-vs">VS</div>
+          <div class="team-score-box team-red">
+            <span id="red-score" class="score-val">0</span>
+            <span class="team-name">TEAM RED</span>
+          </div>
+        </div>
+
         <!-- TOP RIGHT: RADAR / MINIMAP & MATCH STATS -->
         <div id="top-right-panel">
           <div class="match-counters">
@@ -224,36 +237,69 @@
             <div class="logo-sub">CRAFT ROYALE</div>
           </div>
           <div class="flavor-tagline">
-            Minecraft Voxel World &times; PUBG Tactical Shrinking Zone &times; Free Fire Gloo Walls & Skills
+            Minecraft Voxels &times; PUBG Tactical Playzone &times; Free Fire Gloo Walls & 1v1 / 2v2 Arenas
+          </div>
+
+          <!-- MODE SELECTOR TABS -->
+          <div class="mode-tabs">
+            <button class="mode-tab active" data-mode="BATTLE_ROYALE">BATTLE ROYALE (15P)</button>
+            <button class="mode-tab" data-mode="DUEL_1V1">1v1 DUEL ARENA</button>
+            <button class="mode-tab" data-mode="CLASH_2V2">2v2 SQUAD CLASH</button>
+          </div>
+
+          <!-- CUSTOM ROOM & FRIENDS / BOTS PANEL -->
+          <div id="room-panel" class="room-panel hidden">
+            <div class="room-header">
+              <div class="room-id-tag">ROOM: <span id="room-code-display">ROOM-4821</span></div>
+              <button id="btn-copy-invite" class="btn-copy-link">🔗 COPY INVITE LINK</button>
+            </div>
+
+            <div class="room-teams-grid">
+              <!-- Team Blue -->
+              <div class="room-team-card blue-card">
+                <div class="rtc-header">TEAM BLUE (YOUR SQUAD)</div>
+                <div id="blue-slots" class="rtc-slots"></div>
+              </div>
+
+              <!-- Team Red -->
+              <div class="room-team-card red-card">
+                <div class="rtc-header">TEAM RED (OPPOSITION)</div>
+                <div id="red-slots" class="rtc-slots"></div>
+              </div>
+            </div>
+
+            <div class="room-tip">
+              💡 <b>Auto-Fill Ready:</b> Any empty slots are automatically filled with tactical AI bots!
+            </div>
           </div>
 
           <div class="features-summary">
             <div class="feat-badge">⛏️ Mine & Build Voxel Cover</div>
             <div class="feat-badge">🧊 Free Fire Gloo Wall Deploy</div>
-            <div class="feat-badge">⚡ PUBG Electric Shrinking Zone</div>
-            <div class="feat-badge">🪂 Airborne Parachute Deployment</div>
-            <div class="feat-badge">🤖 Tactical AI Bot Combatants</div>
-            <div class="feat-badge">🏆 BOOYAH! #1 Victory Finale</div>
+            <div class="feat-badge">🎯 8x Sniper & 4x ACOG Scopes</div>
+            <div class="feat-badge">💣 M67 Bouncy Frag Grenades</div>
+            <div class="feat-badge">⚔️ 1v1 Duels & 2v2 Team Clash</div>
+            <div class="feat-badge">🏆 BOOYAH! Victory Fanfare</div>
           </div>
 
           <div class="controls-guide">
             <div class="guide-col">
-              <span class="guide-item"><b>WASD</b> : Move</span>
-              <span class="guide-item"><b>MOUSE</b> : Aim & Look</span>
-              <span class="guide-item"><b>LEFT CLICK</b> : Shoot / Mine / Build</span>
-              <span class="guide-item"><b>RIGHT CLICK</b> : Aim Down Sight (ADS)</span>
+              <span class="guide-item"><b>WASD</b> : Move / Parachute</span>
+              <span class="guide-item"><b>MOUSE</b> : Aim (3rd Person)</span>
+              <span class="guide-item"><b>LEFT CLICK</b> : Shoot / Mine / Throw</span>
+              <span class="guide-item"><b>RIGHT CLICK</b> : Aim Down Sights (8x Scope)</span>
             </div>
             <div class="guide-col">
-              <span class="guide-item"><b>1-5 / SCROLL</b> : Hotbar Slots</span>
-              <span class="guide-item"><b>R</b> : Reload Weapon</span>
-              <span class="guide-item"><b>E</b> : Skill (Drop The Beat)</span>
+              <span class="guide-item"><b>1 - 6</b> : Weapon & Item Slots</span>
+              <span class="guide-item"><b>T</b> : Quick Frag Grenade</span>
               <span class="guide-item"><b>G</b> : Deploy Gloo Wall</span>
+              <span class="guide-item"><b>E</b> : Skill (Drop The Beat)</span>
+              <span class="guide-item"><b>R</b> : Reload Weapon</span>
               <span class="guide-item"><b>V</b> : Toggle 1st / 3rd Person</span>
-              <span class="guide-item"><b>SHIFT / SPACE</b> : Sprint / Jump</span>
             </div>
           </div>
 
-          <button id="btn-start" class="btn-primary">DEPLOY INTO BATTLE ROYALE</button>
+          <button id="btn-start" class="btn-primary">DEPLOY INTO BATTLE</button>
         </div>
       </div>
 

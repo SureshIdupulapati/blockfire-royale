@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GameState } from './types';
+import { GameState, GameMode, RoomConfig } from './types';
 import { SoundSynthesizer } from './audio/SoundSynthesizer';
 import { VoxelWorld } from './voxel/VoxelWorld';
 import { ParticleManager } from './combat/ParticleManager';
@@ -11,6 +11,7 @@ import { ZoneManager } from './zone/ZoneManager';
 import { AirDropManager } from './airdrop/AirDropManager';
 import { BotManager } from './ai/BotManager';
 import { UIManager } from './ui/UIManager';
+import { RoomManager } from './network/RoomManager';
 
 class GameApp {
   private canvas: HTMLCanvasElement;
@@ -29,8 +30,10 @@ class GameApp {
   private airdropManager: AirDropManager;
   private botManager: BotManager;
   private uiManager: UIManager;
+  private roomManager: RoomManager;
 
   private gameState: GameState = GameState.LOBBY;
+  private selectedMode: GameMode = GameMode.BATTLE_ROYALE;
   private matchStartTime: number = 0;
   private lastTime: number = performance.now();
   private blocksPlacedCount: number = 0;
@@ -52,7 +55,7 @@ class GameApp {
     this.renderer.toneMappingExposure = 1.1;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x7dd3fc); // Vivid tropical sky blue
+    this.scene.background = new THREE.Color(0x7dd3fc);
     this.scene.fog = new THREE.FogExp2(0x93c5fd, 0.005);
 
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 600);
@@ -67,6 +70,7 @@ class GameApp {
     this.glooManager = new GlooWallManager(this.world, this.sound, this.particles);
     this.skills = new CharacterSkills(this.sound, this.particles);
     this.grenadeManager = new GrenadeManager(this.scene, this.world, this.sound, this.particles);
+    this.roomManager = new RoomManager();
 
     // 4. Generate Procedural Voxel Island
     this.world.generateTerrain();
@@ -109,11 +113,11 @@ class GameApp {
       this.zoneManager
     );
     this.botManager.registerPlayerWeaponListener(this.player);
-
     this.grenadeManager.setEntities(this.botManager, this.player);
 
-    // 8. Initialize UI Overlay
+    // 8. Initialize UI Overlay & Room Handlers
     this.uiManager = new UIManager(this.player, this.zoneManager, this.botManager);
+    this.setupRoomHandlers();
 
     // 9. Setup DOM & Window Events
     this.setupWindowEvents();
@@ -162,10 +166,110 @@ class GameApp {
     });
   }
 
+  private setupRoomHandlers(): void {
+    this.roomManager.onRoomUpdated = (room: RoomConfig) => {
+      this.renderRoomSlots(room);
+    };
+
+    this.roomManager.onScoreUpdated = (blue: number, red: number) => {
+      const bEl = document.getElementById('blue-score');
+      const rEl = document.getElementById('red-score');
+      if (bEl) bEl.innerText = `${blue}`;
+      if (rEl) rEl.innerText = `${red}`;
+    };
+
+    const copyBtn = document.getElementById('btn-copy-invite');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        const link = this.roomManager.getInviteLink();
+        navigator.clipboard.writeText(link).then(() => {
+          copyBtn.innerText = '✅ LINK COPIED!';
+          setTimeout(() => {
+            copyBtn.innerText = '🔗 COPY INVITE LINK';
+          }, 2000);
+        });
+      });
+    }
+  }
+
+  private renderRoomSlots(room: RoomConfig): void {
+    const codeEl = document.getElementById('room-code-display');
+    if (codeEl) codeEl.innerText = room.roomId;
+
+    const blueContainer = document.getElementById('blue-slots');
+    const redContainer = document.getElementById('red-slots');
+    if (!blueContainer || !redContainer) return;
+
+    blueContainer.innerHTML = '';
+    redContainer.innerHTML = '';
+
+    for (const slot of room.slots) {
+      const row = document.createElement('div');
+      row.className = 'rtc-slot-row';
+
+      const info = document.createElement('div');
+      info.className = 'slot-player-info';
+
+      const badge = document.createElement('span');
+      badge.className = `slot-badge ${slot.isHuman ? 'badge-human' : 'badge-bot'}`;
+      badge.innerText = slot.isHuman ? 'HUMAN' : 'BOT';
+
+      const name = document.createElement('span');
+      name.innerText = slot.name;
+
+      info.appendChild(badge);
+      info.appendChild(name);
+      row.appendChild(info);
+
+      if (!slot.isHost) {
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn-slot-toggle';
+        toggleBtn.innerText = slot.isHuman ? 'Switch to Bot' : 'Open for Human';
+        toggleBtn.addEventListener('click', () => {
+          this.roomManager.toggleSlotBot(slot.slotId);
+        });
+        row.appendChild(toggleBtn);
+      }
+
+      if (slot.team === 'blue') {
+        blueContainer.appendChild(row);
+      } else {
+        redContainer.appendChild(row);
+      }
+    }
+  }
+
   private setupMenuHandlers(): void {
-    const btnStart = document.getElementById('btn-start');
-    if (btnStart) {
-      btnStart.addEventListener('click', () => {
+    // Mode selector tabs
+    const tabs = document.querySelectorAll('.mode-tab');
+    const roomPanel = document.getElementById('room-panel');
+    const startBtn = document.getElementById('btn-start');
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        const mode = tab.getAttribute('data-mode') as GameMode;
+        this.selectedMode = mode;
+
+        if (mode === GameMode.BATTLE_ROYALE) {
+          if (roomPanel) roomPanel.classList.add('hidden');
+          if (startBtn) startBtn.innerText = 'DEPLOY INTO BATTLE ROYALE';
+        } else if (mode === GameMode.DUEL_1V1) {
+          if (roomPanel) roomPanel.classList.remove('hidden');
+          this.roomManager.createRoom(GameMode.DUEL_1V1);
+          if (startBtn) startBtn.innerText = 'START 1v1 DUEL ARENA';
+        } else if (mode === GameMode.CLASH_2V2) {
+          if (roomPanel) roomPanel.classList.remove('hidden');
+          this.roomManager.createRoom(GameMode.CLASH_2V2);
+          if (startBtn) startBtn.innerText = 'START 2v2 SQUAD CLASH';
+        }
+      });
+    });
+
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
         this.sound.init();
         this.startMatch();
       });
@@ -173,16 +277,12 @@ class GameApp {
 
     const btnRestartWin = document.getElementById('btn-restart-win');
     if (btnRestartWin) {
-      btnRestartWin.addEventListener('click', () => {
-        window.location.reload();
-      });
+      btnRestartWin.addEventListener('click', () => window.location.reload());
     }
 
     const btnRestartLose = document.getElementById('btn-restart-lose');
     if (btnRestartLose) {
-      btnRestartLose.addEventListener('click', () => {
-        window.location.reload();
-      });
+      btnRestartLose.addEventListener('click', () => window.location.reload());
     }
   }
 
@@ -192,16 +292,43 @@ class GameApp {
 
     this.canvas.requestPointerLock();
 
-    // Drop safely directly over the Center Citadel of the island
-    this.player.position.set(0, 48, 0);
+    // Mode-specific initialization
+    const clashScoreboard = document.getElementById('clash-scoreboard');
+    const zoneBanner = document.getElementById('zone-banner');
+
+    if (this.selectedMode === GameMode.BATTLE_ROYALE) {
+      if (clashScoreboard) clashScoreboard.classList.add('hidden');
+      if (zoneBanner) zoneBanner.classList.remove('hidden');
+
+      this.player.position.set(0, 48, 0);
+      this.zoneManager.initPhase(0);
+      this.botManager.spawnBots(GameMode.BATTLE_ROYALE);
+    } else if (this.selectedMode === GameMode.DUEL_1V1) {
+      if (clashScoreboard) clashScoreboard.classList.remove('hidden');
+      if (zoneBanner) zoneBanner.classList.add('hidden');
+
+      this.player.position.set(0, 48, -15);
+      this.roomManager.resetScores();
+      // Compact arena safe zone
+      this.zoneManager.currentRadius = 40;
+      this.zoneManager.targetRadius = 25;
+      this.botManager.spawnBots(GameMode.DUEL_1V1, this.roomManager.currentRoom);
+    } else if (this.selectedMode === GameMode.CLASH_2V2) {
+      if (clashScoreboard) clashScoreboard.classList.remove('hidden');
+      if (zoneBanner) zoneBanner.classList.add('hidden');
+
+      this.player.position.set(0, 48, -20);
+      this.roomManager.resetScores();
+      this.zoneManager.currentRadius = 55;
+      this.zoneManager.targetRadius = 30;
+      this.botManager.spawnBots(GameMode.CLASH_2V2, this.roomManager.currentRoom);
+    }
+
     this.player.isAirborne = true;
     this.player.isParachuteOpen = false;
     this.player.isThirdPerson = true;
     this.player.vitals.health = 100;
     this.player.vitals.armor = 100;
-
-    // Spawn 14 enemy bots across the island
-    this.botManager.spawnBots();
 
     this.gameState = GameState.AIRBORNE;
     this.matchStartTime = Date.now();
@@ -237,17 +364,21 @@ class GameApp {
     this.world.updateMeshes(this.scene);
     this.glooManager.update(delta);
     this.grenadeManager.update(delta);
-    this.zoneManager.update(delta);
 
-    if (this.zoneManager.isOutsideZone(this.player.position)) {
-      const zoneDmg = this.zoneManager.getCurrentDamagePerSecond() * delta;
-      this.player.applyDamage(zoneDmg);
-      if (Math.random() < delta * 1.5) {
-        this.sound.playZoneWarning();
+    if (this.selectedMode === GameMode.BATTLE_ROYALE) {
+      this.zoneManager.update(delta);
+
+      if (this.zoneManager.isOutsideZone(this.player.position)) {
+        const zoneDmg = this.zoneManager.getCurrentDamagePerSecond() * delta;
+        this.player.applyDamage(zoneDmg);
+        if (Math.random() < delta * 1.5) {
+          this.sound.playZoneWarning();
+        }
       }
+
+      this.airdropManager.update(delta);
     }
 
-    this.airdropManager.update(delta);
     this.botManager.update(delta, this.player);
     this.particles.update(delta);
     this.uiManager.update();
@@ -256,21 +387,24 @@ class GameApp {
   }
 
   private checkMatchConditions(): void {
+    // Defeat
     if (this.player.vitals.health <= 0 && this.gameState !== GameState.DEFEAT) {
       this.gameState = GameState.DEFEAT;
       document.exitPointerLock();
 
-      const rank = this.botManager.getAliveBotCount() + 1;
+      const rank = this.botManager.getAliveOpponentCount() + 1;
       this.uiManager.showDefeatScreen(
         rank,
         this.botManager.playerKills,
         this.botManager.totalDamageDealt,
-        'Enemy Combatant'
+        this.selectedMode === GameMode.BATTLE_ROYALE ? 'Enemy Combatant' : 'Team Red Rival'
       );
       return;
     }
 
-    if (this.botManager.getAliveBotCount() === 0 && this.gameState !== GameState.VICTORY) {
+    // Victory: All opponents eliminated!
+    const opponentsLeft = this.botManager.getAliveOpponentCount();
+    if (opponentsLeft === 0 && this.gameState !== GameState.VICTORY) {
       this.gameState = GameState.VICTORY;
       document.exitPointerLock();
 
