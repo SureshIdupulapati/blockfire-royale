@@ -381,3 +381,4 @@ export class SoundSynthesizer {
     osc.stop(now + 0.65);
   }
 }
+

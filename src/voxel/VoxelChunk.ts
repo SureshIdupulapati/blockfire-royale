@@ -244,3 +244,4 @@ export class VoxelChunk {
     colors.push(shade, shade, shade, shade, shade, shade, shade, shade, shade);
   }
 }
+

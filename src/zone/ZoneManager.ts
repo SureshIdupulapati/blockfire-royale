@@ -11,13 +11,13 @@ export interface ZonePhase {
 export class ZoneManager {
   public scene: THREE.Scene;
   public currentCenter: THREE.Vector2 = new THREE.Vector2(0, 0);
-  public currentRadius: number = 75;
+  public currentRadius: number = 95;
 
   public targetCenter: THREE.Vector2 = new THREE.Vector2(0, 0);
-  public targetRadius: number = 50;
+  public targetRadius: number = 70;
 
   public previousCenter: THREE.Vector2 = new THREE.Vector2(0, 0);
-  public previousRadius: number = 75;
+  public previousRadius: number = 95;
 
   public phaseIndex: number = 0;
   public phaseTimer: number = 0;
@@ -28,18 +28,18 @@ export class ZoneManager {
   private zoneMaterial: THREE.MeshBasicMaterial;
 
   public readonly phases: ZonePhase[] = [
-    { phaseNumber: 1, radius: 55, waitTime: 45, shrinkTime: 30, damagePerSec: 2 },
-    { phaseNumber: 2, radius: 35, waitTime: 35, shrinkTime: 25, damagePerSec: 5 },
-    { phaseNumber: 3, radius: 20, waitTime: 25, shrinkTime: 20, damagePerSec: 10 },
-    { phaseNumber: 4, radius: 8,  waitTime: 15, shrinkTime: 15, damagePerSec: 20 },
-    { phaseNumber: 5, radius: 0,  waitTime: 10, shrinkTime: 15, damagePerSec: 35 }
+    { phaseNumber: 1, radius: 70, waitTime: 45, shrinkTime: 35, damagePerSec: 3 },
+    { phaseNumber: 2, radius: 45, waitTime: 35, shrinkTime: 25, damagePerSec: 6 },
+    { phaseNumber: 3, radius: 24, waitTime: 25, shrinkTime: 20, damagePerSec: 12 },
+    { phaseNumber: 4, radius: 10, waitTime: 15, shrinkTime: 15, damagePerSec: 24 },
+    { phaseNumber: 5, radius: 0,  waitTime: 10, shrinkTime: 15, damagePerSec: 40 }
   ];
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
-    // Create 3D Electric Blue Zone Cylinder
-    const cylinderGeo = new THREE.CylinderGeometry(1, 1, 60, 48, 1, true);
+    // Create 3D Electric Blue Zone Cylinder (100m high)
+    const cylinderGeo = new THREE.CylinderGeometry(1, 1, 100, 48, 1, true);
     this.zoneMaterial = new THREE.MeshBasicMaterial({
       color: 0x00d2ff,
       transparent: true,
@@ -50,7 +50,7 @@ export class ZoneManager {
     });
 
     this.zoneMesh = new THREE.Mesh(cylinderGeo, this.zoneMaterial);
-    this.zoneMesh.position.set(0, 15, 0);
+    this.zoneMesh.position.set(0, 30, 0);
     this.scene.add(this.zoneMesh);
 
     this.initPhase(0);
@@ -75,7 +75,7 @@ export class ZoneManager {
     } else {
       const maxOffset = Math.max(0, this.previousRadius - currentConfig.radius);
       const angle = Math.random() * Math.PI * 2;
-      const dist = Math.random() * maxOffset * 0.8;
+      const dist = Math.random() * maxOffset * 0.75;
 
       this.targetCenter.set(
         this.previousCenter.x + Math.cos(angle) * dist,
@@ -94,13 +94,11 @@ export class ZoneManager {
     this.phaseTimer -= delta;
 
     if (!this.isShrinking) {
-      // Waiting phase
       if (this.phaseTimer <= 0) {
         this.isShrinking = true;
         this.phaseTimer = this.phases[this.phaseIndex].shrinkTime;
       }
     } else {
-      // Shrinking phase
       const currentConfig = this.phases[this.phaseIndex];
       const shrinkProgress = 1.0 - Math.max(0, this.phaseTimer) / currentConfig.shrinkTime;
 
@@ -108,7 +106,6 @@ export class ZoneManager {
       this.currentCenter.lerpVectors(this.previousCenter, this.targetCenter, shrinkProgress);
 
       if (this.phaseTimer <= 0) {
-        // Phase complete -> Advance to next
         this.currentRadius = this.targetRadius;
         this.currentCenter.copy(this.targetCenter);
         this.initPhase(this.phaseIndex + 1);
@@ -116,17 +113,13 @@ export class ZoneManager {
     }
 
     // Update 3D visual cylinder
-    this.zoneMesh.position.set(this.currentCenter.x, 15, this.currentCenter.y);
+    this.zoneMesh.position.set(this.currentCenter.x, 30, this.currentCenter.y);
     this.zoneMesh.scale.set(this.currentRadius, 1, this.currentRadius);
 
-    // Pulse opacity
     const pulse = Math.sin(Date.now() * 0.005) * 0.1;
     this.zoneMaterial.opacity = 0.3 + pulse;
   }
 
-  /**
-   * Checks if a 3D position is outside the safe zone
-   */
   public isOutsideZone(pos: THREE.Vector3): boolean {
     const dx = pos.x - this.currentCenter.x;
     const dz = pos.z - this.currentCenter.y;
@@ -134,9 +127,6 @@ export class ZoneManager {
     return distSq > this.currentRadius * this.currentRadius;
   }
 
-  /**
-   * Calculates zone damage per second
-   */
   public getCurrentDamagePerSecond(): number {
     if (this.phaseIndex < this.phases.length) {
       return this.phases[this.phaseIndex].damagePerSec;

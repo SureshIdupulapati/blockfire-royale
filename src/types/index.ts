@@ -110,3 +110,4 @@ export interface MatchStats {
   rank: number;
   totalParticipants: number;
 }
+

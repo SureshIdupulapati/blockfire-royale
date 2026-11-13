@@ -162,3 +162,4 @@ export const WEAPON_REGISTRY: Record<string, WeaponConfig> = {
     soundType: 'medkit'
   }
 };
+

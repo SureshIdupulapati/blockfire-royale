@@ -68,3 +68,4 @@ export class CharacterSkills {
     return Math.min(1.0, this.skillCooldownRemaining / this.skillCooldownMax);
   }
 }
+

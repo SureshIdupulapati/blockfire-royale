@@ -9,7 +9,7 @@ describe('PUBG Safe Zone System', () => {
 
     expect(zone.phases.length).toBeGreaterThanOrEqual(4);
     expect(zone.phaseIndex).toBe(0);
-    expect(zone.currentRadius).toBe(75);
+    expect(zone.currentRadius).toBe(95);
     expect(zone.isShrinking).toBe(false);
   });
 
@@ -50,3 +50,4 @@ describe('PUBG Safe Zone System', () => {
     expect(zone.isShrinking).toBe(true);
   });
 });
+

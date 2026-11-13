@@ -11,7 +11,8 @@ export class VoxelWorld implements VoxelGrid {
   public material: THREE.MeshLambertMaterial;
   public worldGroup: THREE.Group;
 
-  public readonly chunkRadius: number = 3; // -3 to 3 = 7x7 chunks = 112x112 blocks
+  // Massive 208x208 battle royale terrain (radius 6 = -6 to 6 = 13x13 chunks)
+  public readonly chunkRadius: number = 6;
   public readonly worldMinX: number;
   public readonly worldMaxX: number;
   public readonly worldMinZ: number;
@@ -101,9 +102,11 @@ export class VoxelWorld implements VoxelGrid {
   }
 
   /**
-   * Generates procedural battle royale island terrain with hills, forests, ruins, and crates
+   * Generates a massive procedural battle royale island with natural perimeter barriers
    */
   public generateTerrain(): void {
+    const islandRadius = 88; // Large 176m playable island landmass
+
     for (let cx = -this.chunkRadius; cx <= this.chunkRadius; cx++) {
       for (let cz = -this.chunkRadius; cz <= this.chunkRadius; cz++) {
         const chunk = this.getOrCreateChunk(cx, cz);
@@ -115,35 +118,57 @@ export class VoxelWorld implements VoxelGrid {
             const wx = originX + x;
             const wz = originZ + z;
 
-            // Height formula: smooth rolling hills with flatter center for arena combat
             const distFromCenter = Math.sqrt(wx * wx + wz * wz);
-            const hill1 = Math.sin(wx * 0.06) * Math.cos(wz * 0.06) * 3;
-            const hill2 = Math.sin(wx * 0.12 + 1.2) * Math.sin(wz * 0.12 + 0.8) * 1.5;
-            const baseHeight = 8 + Math.floor(hill1 + hill2);
-            const height = Math.max(3, Math.min(VoxelChunk.SIZE_Y - 8, baseHeight));
 
-            // Layer blocks: Bedrock/Stone -> Dirt -> Grass
+            let height = 3; // Sea floor baseline
+
+            if (distFromCenter <= islandRadius) {
+              // Rolling hills across the vast island
+              const h1 = Math.sin(wx * 0.04) * Math.cos(wz * 0.04) * 4.5;
+              const h2 = Math.sin(wx * 0.08 + 1.5) * Math.sin(wz * 0.08 + 0.7) * 2.5;
+              const h3 = Math.sin(wx * 0.015) * Math.cos(wz * 0.015) * 5;
+
+              // Island shape: falls off gently near shoreline (radius 75-88)
+              let falloff = 1.0;
+              if (distFromCenter > 70) {
+                falloff = Math.max(0, 1.0 - (distFromCenter - 70) / (islandRadius - 70));
+              }
+
+              const baseHeight = 6 + (h1 + h2 + h3) * falloff;
+              height = Math.max(4, Math.min(VoxelChunk.SIZE_Y - 6, Math.floor(baseHeight)));
+            } else if (distFromCenter >= islandRadius + 10) {
+              // Outer mountain wall: prevents ever falling off the world into void
+              const cliffHeight = Math.min(VoxelChunk.SIZE_Y - 4, 18 + Math.floor(Math.sin(wx * 0.1) * 3));
+              height = cliffHeight;
+            } else {
+              // Sandy beach transition
+              height = 4;
+            }
+
+            // Fill voxel column
             for (let y = 0; y <= height; y++) {
               if (y === height) {
-                // Top layer: Sand if near island outer ring, otherwise Grass
-                if (distFromCenter > 45) {
-                  chunk.setBlock(x, y, z, BlockType.SAND);
+                if (distFromCenter >= islandRadius + 10) {
+                  chunk.setBlock(x, y, z, BlockType.OBSIDIAN); // Unbreakable boundary cliff
+                } else if (height <= 5 || distFromCenter > 68) {
+                  chunk.setBlock(x, y, z, BlockType.SAND); // Beach
                 } else {
-                  chunk.setBlock(x, y, z, BlockType.GRASS);
+                  chunk.setBlock(x, y, z, BlockType.GRASS); // Lush plains & hills
                 }
               } else if (y >= height - 2) {
-                chunk.setBlock(x, y, z, BlockType.DIRT);
+                chunk.setBlock(x, y, z, distFromCenter >= islandRadius + 10 ? BlockType.STONE : BlockType.DIRT);
               } else {
                 chunk.setBlock(x, y, z, BlockType.STONE);
               }
             }
 
-            // Scatter oak trees (Minecraft style)
+            // Scatter oak trees across the island
             if (
+              distFromCenter < 65 &&
+              height >= 6 &&
               x > 2 && x < VoxelChunk.SIZE_X - 3 &&
               z > 2 && z < VoxelChunk.SIZE_Z - 3 &&
-              distFromCenter < 42 &&
-              (Math.sin(wx * 37.1 + wz * 43.3) * 0.5 + 0.5) > 0.94
+              (Math.sin(wx * 51.3 + wz * 37.7) * 0.5 + 0.5) > 0.93
             ) {
               this.generateTree(chunk, x, height + 1, z);
             }
@@ -152,35 +177,40 @@ export class VoxelWorld implements VoxelGrid {
       }
     }
 
-    // Spawn military watchtowers / sniper outposts (PUBG hot drops)
-    this.buildWatchtower(-20, this.getHighestY(-20, -20) + 1, -20);
-    this.buildWatchtower(20, this.getHighestY(20, 20) + 1, 20);
-    this.buildWatchtower(-25, this.getHighestY(-25, 25) + 1, 25);
-    this.buildWatchtower(25, this.getHighestY(25, -25) + 1, -25);
+    // Build tactical battle royale landmarks across the map
+    this.buildWatchtower(0, this.getHighestY(0, 0) + 1, 0); // Center Citadel
+    this.buildWatchtower(-40, this.getHighestY(-40, -40) + 1, -40);
+    this.buildWatchtower(40, this.getHighestY(40, 40) + 1, 40);
+    this.buildWatchtower(-45, this.getHighestY(-45, 45) + 1, 45);
+    this.buildWatchtower(45, this.getHighestY(45, -45) + 1, -45);
+    this.buildWatchtower(0, this.getHighestY(0, 50) + 1, 50);
+    this.buildWatchtower(0, this.getHighestY(0, -50) + 1, -50);
+    this.buildWatchtower(50, this.getHighestY(50, 0) + 1, 0);
+    this.buildWatchtower(-50, this.getHighestY(-50, 0) + 1, 0);
 
-    // Spawn tactical brick bunkers / ruins
-    this.buildBunker(0, this.getHighestY(0, 0) + 1, 0);
+    // Bunkers & trench ruins
+    this.buildBunker(-20, this.getHighestY(-20, 20) + 1, 20);
+    this.buildBunker(20, this.getHighestY(20, -20) + 1, -20);
+    this.buildBunker(25, this.getHighestY(25, 25) + 1, 25);
+    this.buildBunker(-25, this.getHighestY(-25, -25) + 1, -25);
 
-    // Spawn initial supply loot crates
     this.spawnLootCrates();
   }
 
   private generateTree(chunk: VoxelChunk, lx: number, startY: number, lz: number): void {
     const trunkHeight = 4 + Math.floor(Math.random() * 2);
-    // Trunk
     for (let dy = 0; dy < trunkHeight; dy++) {
       if (startY + dy < VoxelChunk.SIZE_Y) {
         chunk.setBlock(lx, startY + dy, lz, BlockType.WOOD);
       }
     }
 
-    // Leaves canopy
     const leafStart = startY + trunkHeight - 2;
     for (let dy = 0; dy < 3; dy++) {
       const radius = dy === 2 ? 1 : 2;
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
-          if (dx === 0 && dz === 0 && dy < 2) continue; // Trunk space
+          if (dx === 0 && dz === 0 && dy < 2) continue;
           const px = lx + dx;
           const py = leafStart + dy;
           const pz = lz + dz;
@@ -199,7 +229,6 @@ export class VoxelWorld implements VoxelGrid {
   }
 
   private buildWatchtower(wx: number, wy: number, wz: number): void {
-    // 4x4 stone & wood observation post
     const towerHeight = 7;
     for (let dy = 0; dy < towerHeight; dy++) {
       for (let dx = -1; dx <= 2; dx++) {
@@ -229,13 +258,11 @@ export class VoxelWorld implements VoxelGrid {
         for (let dy = 0; dy < 3; dy++) {
           const isPerimeter = Math.abs(dx) === 3 || Math.abs(dz) === 3;
           if (isPerimeter && dy < 2) {
-            // Door opening on one side
             if (!(dx === 0 && dz === 3)) {
               this.setBlock(wx + dx, wy + dy, wz + dz, BlockType.BRICK);
             }
           }
           if (dy === 2) {
-            // Roof
             this.setBlock(wx + dx, wy + dy, wz + dz, BlockType.BRICK);
           }
         }
@@ -245,9 +272,10 @@ export class VoxelWorld implements VoxelGrid {
 
   private spawnLootCrates(): void {
     const crateSpots = [
+      [-30, -30], [30, 30], [-35, 35], [35, -35],
       [-15, -15], [15, 15], [-18, 18], [18, -18],
       [-5, -10], [10, -5], [-8, 12], [8, 10],
-      [0, -1], [0, 1]
+      [0, -2], [0, 2], [0, 25], [0, -25], [25, 0], [-25, 0]
     ];
 
     for (const [x, z] of crateSpots) {
@@ -262,12 +290,9 @@ export class VoxelWorld implements VoxelGrid {
         return y;
       }
     }
-    return 0;
+    return 4; // Safe baseline ground level
   }
 
-  /**
-   * Rebuilds meshes for all modified chunks
-   */
   public updateMeshes(scene: THREE.Scene): void {
     for (const chunk of this.chunks.values()) {
       if (chunk.isDirty) {
@@ -283,9 +308,6 @@ export class VoxelWorld implements VoxelGrid {
     }
   }
 
-  /**
-   * AABB collision testing against voxel terrain blocks
-   */
   public checkAABBCollision(box: THREE.Box3): boolean {
     const minX = Math.floor(box.min.x);
     const maxX = Math.floor(box.max.x);

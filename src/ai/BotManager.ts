@@ -53,12 +53,12 @@ export class BotManager {
 
     for (let i = 0; i < this.botNames.length; i++) {
       const name = this.botNames[i];
-      // Random coordinates across the island
+      // Random coordinates across the massive island
       const angle = (i / this.botNames.length) * Math.PI * 2;
-      const radius = 20 + Math.random() * 25;
+      const radius = 25 + Math.random() * 45;
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
-      const startPos = new THREE.Vector3(x, 45 + Math.random() * 10, z);
+      const startPos = new THREE.Vector3(x, 48 + Math.random() * 8, z);
 
       const bot = new BotAI(
         `bot-${i}`,
@@ -212,3 +212,4 @@ export class BotManager {
     return this.bots.filter(b => b.isAlive).length;
   }
 }
+

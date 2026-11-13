@@ -137,3 +137,4 @@ export const BLOCK_DEFINITIONS: Record<BlockType, BlockDefinition> = {
     textures: { top: 13, bottom: 13, side: 13 }
   }
 };
+

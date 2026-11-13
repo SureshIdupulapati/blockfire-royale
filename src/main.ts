@@ -50,10 +50,10 @@ class GameApp {
     this.renderer.toneMappingExposure = 1.1;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87ceeb); // Sky blue
-    this.scene.fog = new THREE.FogExp2(0xa0c4ff, 0.008);
+    this.scene.background = new THREE.Color(0x7dd3fc); // Vivid tropical sky blue
+    this.scene.fog = new THREE.FogExp2(0x93c5fd, 0.005);
 
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 600);
 
     // 2. Setup Lighting
     this.setupLighting();
@@ -69,11 +69,23 @@ class GameApp {
     this.world.generateTerrain();
     this.world.updateMeshes(this.scene);
 
-    // 5. Initialize Battle Royale Systems
+    // 5. Add Ocean Water Basin (Spanning 800m across)
+    const oceanGeo = new THREE.PlaneGeometry(800, 800);
+    const oceanMat = new THREE.MeshLambertMaterial({
+      color: 0x0284c7,
+      transparent: true,
+      opacity: 0.75
+    });
+    const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+    oceanMesh.rotation.x = -Math.PI / 2;
+    oceanMesh.position.y = 3.6;
+    this.scene.add(oceanMesh);
+
+    // 6. Initialize Battle Royale Systems
     this.zoneManager = new ZoneManager(this.scene);
     this.airdropManager = new AirDropManager(this.scene, this.world);
 
-    // 6. Initialize Player & AI Bots
+    // 7. Initialize Player & AI Bots
     this.player = new PlayerController(
       this.camera,
       this.scene,
@@ -94,10 +106,10 @@ class GameApp {
     );
     this.botManager.registerPlayerWeaponListener(this.player);
 
-    // 7. Initialize UI Overlay
+    // 8. Initialize UI Overlay
     this.uiManager = new UIManager(this.player, this.zoneManager, this.botManager);
 
-    // 8. Setup DOM & Window Events
+    // 9. Setup DOM & Window Events
     this.setupWindowEvents();
     this.setupMenuHandlers();
 
@@ -107,27 +119,24 @@ class GameApp {
   }
 
   private setupLighting(): void {
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambientLight);
 
-    // Directional sunlight with shadows
-    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.2);
-    sunLight.position.set(50, 100, 30);
+    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.25);
+    sunLight.position.set(60, 120, 40);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
     sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 250;
-    const shadowD = 60;
+    sunLight.shadow.camera.far = 300;
+    const shadowD = 85;
     sunLight.shadow.camera.left = -shadowD;
     sunLight.shadow.camera.right = shadowD;
     sunLight.shadow.camera.top = shadowD;
     sunLight.shadow.camera.bottom = -shadowD;
     this.scene.add(sunLight);
 
-    // Hemispheric sky / ground bounce
-    const hemiLight = new THREE.HemisphereLight(0xb1e1ff, 0x3b82f6, 0.4);
+    const hemiLight = new THREE.HemisphereLight(0xbae6fd, 0x0284c7, 0.45);
     this.scene.add(hemiLight);
   }
 
@@ -177,14 +186,15 @@ class GameApp {
 
     this.canvas.requestPointerLock();
 
-    // Player drops from high altitude
-    this.player.position.set(0, 55, 0);
+    // Drop safely directly over the Center Citadel of the island
+    this.player.position.set(0, 48, 0);
     this.player.isAirborne = true;
     this.player.isParachuteOpen = false;
+    this.player.isThirdPerson = true;
     this.player.vitals.health = 100;
     this.player.vitals.armor = 100;
 
-    // Spawn 14 enemy bots
+    // Spawn 14 enemy bots across the island
     this.botManager.spawnBots();
 
     this.gameState = GameState.AIRBORNE;
@@ -205,15 +215,12 @@ class GameApp {
   }
 
   private updateGame(delta: number): void {
-    // 1. Transition from AIRBORNE to PLAYING when player touches down
     if (this.gameState === GameState.AIRBORNE && !this.player.isAirborne) {
       this.gameState = GameState.PLAYING;
     }
 
-    // 2. Update Player
     this.player.update(delta);
 
-    // 3. Update Skills & Heals
     this.skills.update(delta, this.player.position, (amount) => {
       this.player.vitals.health = Math.min(
         this.player.vitals.maxHealth,
@@ -221,16 +228,10 @@ class GameApp {
       );
     });
 
-    // 4. Update Voxel Meshes if blocks were placed/destroyed
     this.world.updateMeshes(this.scene);
-
-    // 5. Update Free Fire Gloo Walls
     this.glooManager.update(delta);
-
-    // 6. Update PUBG Safe Zone
     this.zoneManager.update(delta);
 
-    // Player Zone damage
     if (this.zoneManager.isOutsideZone(this.player.position)) {
       const zoneDmg = this.zoneManager.getCurrentDamagePerSecond() * delta;
       this.player.applyDamage(zoneDmg);
@@ -239,24 +240,15 @@ class GameApp {
       }
     }
 
-    // 7. Update PUBG AirDrops
     this.airdropManager.update(delta);
-
-    // 8. Update Tactical Enemy Bots
     this.botManager.update(delta, this.player);
-
-    // 9. Update Particles & Tracers
     this.particles.update(delta);
-
-    // 10. Update HUD & Minimap
     this.uiManager.update();
 
-    // 11. Check Victory / Defeat Conditions
     this.checkMatchConditions();
   }
 
   private checkMatchConditions(): void {
-    // Defeat Condition: Player HP <= 0
     if (this.player.vitals.health <= 0 && this.gameState !== GameState.DEFEAT) {
       this.gameState = GameState.DEFEAT;
       document.exitPointerLock();
@@ -271,7 +263,6 @@ class GameApp {
       return;
     }
 
-    // Victory Condition: All enemy bots eliminated!
     if (this.botManager.getAliveBotCount() === 0 && this.gameState !== GameState.VICTORY) {
       this.gameState = GameState.VICTORY;
       document.exitPointerLock();
@@ -293,7 +284,6 @@ class GameApp {
   }
 }
 
-// Bootstrap application on window load
 window.addEventListener('DOMContentLoaded', () => {
   new GameApp();
 });

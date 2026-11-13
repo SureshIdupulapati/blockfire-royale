@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { VoxelWorld } from '../voxel/VoxelWorld';
 import { raycastVoxel } from '../voxel/VoxelRaycast';
-import { BlockType, InventorySlot, PlayerVitals, GameState, WeaponConfig } from '../types';
+import { BlockType, InventorySlot, PlayerVitals, WeaponConfig } from '../types';
 import { BLOCK_DEFINITIONS } from '../voxel/VoxelTypes';
 import { WEAPON_REGISTRY } from '../combat/WeaponTypes';
 import { RecoilSystem } from '../combat/RecoilSystem';
@@ -20,30 +20,29 @@ export class PlayerController {
   public skills: CharacterSkills;
 
   // Player position & physics
-  public position: THREE.Vector3 = new THREE.Vector3(0, 50, 0);
+  public position: THREE.Vector3 = new THREE.Vector3(0, 48, 0);
   public velocity: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
-  public rotation: THREE.Euler = new THREE.Euler(0, 0, 0, 'YXZ');
   public boundingBox: THREE.Box3 = new THREE.Box3();
   public isGrounded: boolean = false;
 
-  // Camera settings
-  public isThirdPerson: boolean = false;
+  // Camera settings: TPS is DEFAULT!
+  public isThirdPerson: boolean = true;
   public isADS: boolean = false;
   public pitch: number = 0;
   public yaw: number = 0;
   private mouseSensitivity: number = 0.0022;
 
   // Movement constants
-  private walkSpeed: number = 6.0;
-  private sprintSpeed: number = 9.5;
-  private jumpSpeed: number = 8.5;
+  private walkSpeed: number = 6.5;
+  private sprintSpeed: number = 10.5;
+  private jumpSpeed: number = 9.0;
   private gravity: number = 24.0;
   public isSprinting: boolean = false;
 
   // Parachute / Airborne state
   public isAirborne: boolean = true;
   public isParachuteOpen: boolean = false;
-  public altitude: number = 50;
+  public altitude: number = 48;
   private parachuteMesh: THREE.Group | null = null;
 
   // Vitals & inventory
@@ -54,17 +53,17 @@ export class PlayerController {
     maxArmor: 100,
     helmetTier: 2,
     vestTier: 2,
-    woodCount: 50,
-    stoneCount: 30,
-    glooCount: 3
+    woodCount: 80,
+    stoneCount: 50,
+    glooCount: 4
   };
 
   public inventory: InventorySlot[] = [
     { weapon: WEAPON_REGISTRY.m416, currentAmmo: 30, reserveAmmo: 180 },
     { weapon: WEAPON_REGISTRY.mp40, currentAmmo: 32, reserveAmmo: 200 },
     { weapon: WEAPON_REGISTRY.pickaxe, currentAmmo: 0, reserveAmmo: 0 },
-    { weapon: WEAPON_REGISTRY.gloo_wall, currentAmmo: 3, reserveAmmo: 0 },
-    { weapon: WEAPON_REGISTRY.medkit, currentAmmo: 2, reserveAmmo: 0 }
+    { weapon: WEAPON_REGISTRY.gloo_wall, currentAmmo: 4, reserveAmmo: 0 },
+    { weapon: WEAPON_REGISTRY.medkit, currentAmmo: 3, reserveAmmo: 0 }
   ];
   public activeSlotIndex: number = 0;
 
@@ -75,10 +74,23 @@ export class PlayerController {
   public reloadTimer: number = 0;
   private isMouseDown: boolean = false;
 
-  // 3D Player Character Model (voxel avatar)
+  // 3D Player Character Model (Fully Animated Rig)
   public playerMesh: THREE.Group;
+  private torsoGroup: THREE.Group;
   private headMesh: THREE.Mesh;
-  private gunMesh: THREE.Mesh;
+  private legLeft: THREE.Mesh;
+  private legRight: THREE.Mesh;
+  private armLeft: THREE.Group;
+  private armRight: THREE.Group;
+  private gunMesh: THREE.Group;
+  private pickaxeMesh: THREE.Group;
+  private glooOrbMesh: THREE.Mesh;
+  private muzzleFlashMesh: THREE.Mesh;
+
+  // Animation timers
+  private walkCycle: number = 0;
+  private pickaxeSwingTimer: number = 0;
+  private muzzleFlashTimer: number = 0;
 
   // Input states
   private keys: Record<string, boolean> = {};
@@ -100,38 +112,138 @@ export class PlayerController {
     this.glooManager = glooManager;
     this.skills = skills;
 
-    // Build Voxel Player Avatar
+    // 1. Build Animated Voxel Character Model
     this.playerMesh = new THREE.Group();
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2563eb });
-    const skinMat = new THREE.MeshLambertMaterial({ color: 0xfbbf24 });
-    const vestMat = new THREE.MeshLambertMaterial({ color: 0x1f2937 });
-    const helmetMat = new THREE.MeshLambertMaterial({ color: 0x374151 });
 
-    // Torso with tactical vest
-    const bodyGeo = new THREE.BoxGeometry(0.55, 0.75, 0.3);
-    const bodyMesh = new THREE.Mesh(bodyGeo, vestMat);
-    bodyMesh.position.y = 0.9;
-    this.playerMesh.add(bodyMesh);
+    // Materials
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
+    const vestMat = new THREE.MeshLambertMaterial({ color: 0x1e3a5f }); // Tactical navy camo vest
+    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x334155 }); // Dark combat pants
+    const helmetMat = new THREE.MeshLambertMaterial({ color: 0x0f172a }); // Tactical Kevlar helmet
+    const gunMat = new THREE.MeshLambertMaterial({ color: 0x18181b }); // Matte steel
+    const goldMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
 
-    // Head with tactical helmet
-    const headGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+    // Legs
+    const legGeo = new THREE.BoxGeometry(0.24, 0.75, 0.26);
+    this.legLeft = new THREE.Mesh(legGeo, pantsMat);
+    this.legLeft.position.set(-0.16, 0.38, 0);
+    this.legLeft.castShadow = true;
+    this.playerMesh.add(this.legLeft);
+
+    this.legRight = new THREE.Mesh(legGeo, pantsMat);
+    this.legRight.position.set(0.16, 0.38, 0);
+    this.legRight.castShadow = true;
+    this.playerMesh.add(this.legRight);
+
+    // Torso Group (contains upper body, head, arms, and gun)
+    this.torsoGroup = new THREE.Group();
+    this.torsoGroup.position.set(0, 0.75, 0);
+    this.playerMesh.add(this.torsoGroup);
+
+    // Torso body
+    const torsoGeo = new THREE.BoxGeometry(0.58, 0.72, 0.32);
+    const torsoMesh = new THREE.Mesh(torsoGeo, vestMat);
+    torsoMesh.position.set(0, 0.36, 0);
+    torsoMesh.castShadow = true;
+    this.torsoGroup.add(torsoMesh);
+
+    // Backpack
+    const packGeo = new THREE.BoxGeometry(0.42, 0.45, 0.16);
+    const packMesh = new THREE.Mesh(packGeo, helmetMat);
+    packMesh.position.set(0, 0.38, 0.22);
+    this.torsoGroup.add(packMesh);
+
+    // Head
+    const headGeo = new THREE.BoxGeometry(0.36, 0.36, 0.36);
     this.headMesh = new THREE.Mesh(headGeo, skinMat);
-    this.headMesh.position.y = 1.45;
+    this.headMesh.position.set(0, 0.9, 0);
+    this.headMesh.castShadow = true;
 
-    const helmetGeo = new THREE.BoxGeometry(0.38, 0.2, 0.38);
+    // Tactical Helmet & Visor
+    const helmetGeo = new THREE.BoxGeometry(0.4, 0.2, 0.4);
     const helmetMesh = new THREE.Mesh(helmetGeo, helmetMat);
-    helmetMesh.position.y = 0.1;
+    helmetMesh.position.set(0, 0.1, 0);
     this.headMesh.add(helmetMesh);
-    this.playerMesh.add(this.headMesh);
 
-    // Gun in hand
-    const gunGeo = new THREE.BoxGeometry(0.1, 0.12, 0.6);
-    const gunMat = new THREE.MeshLambertMaterial({ color: 0x111827 });
-    this.gunMesh = new THREE.Mesh(gunGeo, gunMat);
-    this.gunMesh.position.set(0.32, 0.85, -0.4);
-    this.playerMesh.add(this.gunMesh);
+    const visorGeo = new THREE.BoxGeometry(0.32, 0.08, 0.06);
+    const visorMat = new THREE.MeshBasicMaterial({ color: 0x00d2ff });
+    const visorMesh = new THREE.Mesh(visorGeo, visorMat);
+    visorMesh.position.set(0, -0.02, -0.19);
+    this.headMesh.add(visorMesh);
 
-    this.playerMesh.castShadow = true;
+    this.torsoGroup.add(this.headMesh);
+
+    // Left Arm
+    this.armLeft = new THREE.Group();
+    this.armLeft.position.set(-0.38, 0.65, 0);
+    const armGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
+    const armLMesh = new THREE.Mesh(armGeo, vestMat);
+    armLMesh.position.set(0, -0.3, 0);
+    armLMesh.castShadow = true;
+    this.armLeft.add(armLMesh);
+    this.torsoGroup.add(this.armLeft);
+
+    // Right Arm (holds weapon)
+    this.armRight = new THREE.Group();
+    this.armRight.position.set(0.38, 0.65, 0);
+    const armRMesh = new THREE.Mesh(armGeo, vestMat);
+    armRMesh.position.set(0, -0.3, 0);
+    armRMesh.castShadow = true;
+    this.armRight.add(armRMesh);
+    this.torsoGroup.add(this.armRight);
+
+    // 2. Weapon Meshes
+    // Gun Group
+    this.gunMesh = new THREE.Group();
+    const receiverGeo = new THREE.BoxGeometry(0.1, 0.14, 0.45);
+    const receiverMesh = new THREE.Mesh(receiverGeo, gunMat);
+    this.gunMesh.add(receiverMesh);
+
+    const barrelGeo = new THREE.BoxGeometry(0.06, 0.06, 0.4);
+    const barrelMesh = new THREE.Mesh(barrelGeo, gunMat);
+    barrelMesh.position.set(0, 0.02, -0.38);
+    this.gunMesh.add(barrelMesh);
+
+    const magGeo = new THREE.BoxGeometry(0.08, 0.22, 0.12);
+    const magMesh = new THREE.Mesh(magGeo, gunMat);
+    magMesh.position.set(0, -0.14, -0.05);
+    this.gunMesh.add(magMesh);
+
+    // Muzzle Flash
+    const flashGeo = new THREE.OctahedronGeometry(0.14, 0);
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffea00, transparent: true, opacity: 0 });
+    this.muzzleFlashMesh = new THREE.Mesh(flashGeo, flashMat);
+    this.muzzleFlashMesh.position.set(0, 0.02, -0.6);
+    this.gunMesh.add(this.muzzleFlashMesh);
+
+    this.gunMesh.position.set(0, -0.35, -0.25);
+    this.armRight.add(this.gunMesh);
+
+    // Pickaxe Mesh
+    this.pickaxeMesh = new THREE.Group();
+    const handleGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.8, 6);
+    const woodMat = new THREE.MeshLambertMaterial({ color: 0x854d0e });
+    const handleMesh = new THREE.Mesh(handleGeo, woodMat);
+    handleMesh.rotation.x = Math.PI / 2;
+    this.pickaxeMesh.add(handleMesh);
+
+    const pickHeadGeo = new THREE.BoxGeometry(0.48, 0.08, 0.12);
+    const pickHeadMesh = new THREE.Mesh(pickHeadGeo, goldMat);
+    pickHeadMesh.position.set(0, 0, -0.38);
+    this.pickaxeMesh.add(pickHeadMesh);
+
+    this.pickaxeMesh.position.set(0, -0.35, -0.2);
+    this.pickaxeMesh.visible = false;
+    this.armRight.add(this.pickaxeMesh);
+
+    // Gloo Wall Capsule Orb
+    const orbGeo = new THREE.DodecahedronGeometry(0.15, 0);
+    const orbMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+    this.glooOrbMesh = new THREE.Mesh(orbGeo, orbMat);
+    this.glooOrbMesh.position.set(0, -0.35, -0.2);
+    this.glooOrbMesh.visible = false;
+    this.armRight.add(this.glooOrbMesh);
+
     this.scene.add(this.playerMesh);
 
     this.setupParachuteMesh();
@@ -142,13 +254,13 @@ export class PlayerController {
     this.parachuteMesh = new THREE.Group();
 
     // Large military camouflage canopy
-    const canopyGeo = new THREE.CylinderGeometry(2.4, 0.8, 1.2, 8, 1, true);
+    const canopyGeo = new THREE.CylinderGeometry(2.8, 1.0, 1.4, 8, 1, true);
     const canopyMat = new THREE.MeshLambertMaterial({
-      color: 0x15803d,
+      color: 0x16a34a,
       side: THREE.DoubleSide
     });
     const canopy = new THREE.Mesh(canopyGeo, canopyMat);
-    canopy.position.y = 3.2;
+    canopy.position.y = 3.6;
     this.parachuteMesh.add(canopy);
 
     // Cords
@@ -157,7 +269,7 @@ export class PlayerController {
       const angle = (i * Math.PI) / 2;
       const geo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 1.6, 0),
-        new THREE.Vector3(Math.cos(angle) * 2.2, 3.2, Math.sin(angle) * 2.2)
+        new THREE.Vector3(Math.cos(angle) * 2.5, 3.6, Math.sin(angle) * 2.5)
       ]);
       const cord = new THREE.Line(geo, cordMat);
       this.parachuteMesh.add(cord);
@@ -181,7 +293,6 @@ export class PlayerController {
 
     if (e.code === 'KeyV') {
       this.isThirdPerson = !this.isThirdPerson;
-      this.playerMesh.visible = this.isThirdPerson;
     }
 
     if (e.code === 'KeyR') {
@@ -203,7 +314,6 @@ export class PlayerController {
       }
     }
 
-    // Number keys 1-5 for hotbar
     if (e.key >= '1' && e.key <= '5') {
       const slot = parseInt(e.key, 10) - 1;
       this.selectSlot(slot);
@@ -244,8 +354,8 @@ export class PlayerController {
     this.yaw -= e.movementX * this.mouseSensitivity * adsMultiplier;
     this.pitch -= e.movementY * this.mouseSensitivity * adsMultiplier;
 
-    // Clamp pitch (-89 to +89 degrees)
-    this.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this.pitch));
+    // Pitch limit (-80 to +80 degrees)
+    this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch));
   }
 
   private onWheel(e: WheelEvent): void {
@@ -260,7 +370,17 @@ export class PlayerController {
     if (index >= 0 && index < this.inventory.length) {
       this.activeSlotIndex = index;
       this.isReloading = false;
+      this.updateEquippedMesh();
     }
+  }
+
+  private updateEquippedMesh(): void {
+    const slot = this.getActiveSlot();
+    const id = slot.weapon ? slot.weapon.id : '';
+
+    this.gunMesh.visible = id === 'm416' || id === 'ak47' || id === 'mp40' || id === 'awm' || id === 'm1887';
+    this.pickaxeMesh.visible = id === 'pickaxe';
+    this.glooOrbMesh.visible = id === 'gloo_wall';
   }
 
   public getActiveWeapon(): WeaponConfig | null {
@@ -274,12 +394,15 @@ export class PlayerController {
   public deployGlooWall(): boolean {
     if (this.vitals.glooCount <= 0) return false;
 
+    // Forward direction from camera view
     const lookDir = new THREE.Vector3();
     this.camera.getWorldDirection(lookDir);
 
     const success = this.glooManager.deployGlooWall(this.position, lookDir);
     if (success) {
       this.vitals.glooCount--;
+      // Arm throw gesture
+      this.armRight.rotation.x = -1.2;
       return true;
     }
     return false;
@@ -313,11 +436,11 @@ export class PlayerController {
     }
 
     if (weapon.id === 'pickaxe') {
+      this.pickaxeSwingTimer = 0.3;
       this.mineOrBuild();
       return;
     }
 
-    // Fire weapon
     if (this.shootCooldown <= 0 && !this.isReloading) {
       if (slot.currentAmmo > 0) {
         this.fireBullet(weapon);
@@ -342,10 +465,9 @@ export class PlayerController {
     const lookDir = new THREE.Vector3();
     this.camera.getWorldDirection(lookDir);
 
-    const hit = raycastVoxel(this.world, this.camera.position, lookDir, 5.0);
+    const hit = raycastVoxel(this.world, this.camera.position, lookDir, 7.0);
 
     if (hit.hit && hit.blockPosition && hit.blockType) {
-      // Mine the targeted block
       const bx = hit.blockPosition.x;
       const by = hit.blockPosition.y;
       const bz = hit.blockPosition.z;
@@ -358,9 +480,8 @@ export class PlayerController {
 
       this.world.setBlock(bx, by, bz, BlockType.AIR);
       this.sound.playMineBlock();
-      this.particles.spawnVoxelDebris(hit.point, 0x887755, 10);
+      this.particles.spawnVoxelDebris(hit.point, 0x887755, 12);
     } else if (hit.placePosition && (this.vitals.woodCount >= 10 || this.vitals.stoneCount >= 10)) {
-      // Build a ramp or wall block (Minecraft building)
       const px = hit.placePosition.x;
       const py = hit.placePosition.y;
       const pz = hit.placePosition.z;
@@ -371,7 +492,7 @@ export class PlayerController {
 
       this.world.setBlock(px, py, pz, blockToPlace);
       this.sound.playPlaceBlock();
-      this.particles.spawnVoxelDebris(new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5), 0x996633, 5);
+      this.particles.spawnVoxelDebris(new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5), 0x996633, 6);
     }
   }
 
@@ -380,10 +501,17 @@ export class PlayerController {
     this.recoil.applyRecoil(weapon.recoilVertical, weapon.recoilHorizontal, this.isADS);
     this.sound.playGunshot(weapon.soundType as any);
 
+    // Muzzle flash on gun barrel
+    (this.muzzleFlashMesh.material as THREE.MeshBasicMaterial).opacity = 1.0;
+    this.muzzleFlashTimer = 0.06;
+
+    // Arm recoil kick
+    this.armRight.position.z += 0.08;
+
+    // Crosshair Raycast to find target point in 3D world
     const lookDir = new THREE.Vector3();
     this.camera.getWorldDirection(lookDir);
 
-    // Apply weapon spread bloom
     const spread = this.recoil.getEffectiveSpread(weapon.spread);
     lookDir.x += (Math.random() - 0.5) * spread;
     lookDir.y += (Math.random() - 0.5) * spread;
@@ -393,32 +521,30 @@ export class PlayerController {
     const rayOrigin = this.camera.position.clone();
     const voxelHit = raycastVoxel(this.world, rayOrigin, lookDir, weapon.range);
 
-    const muzzlePos = this.playerMesh.position.clone().add(new THREE.Vector3(0.3, 1.2, 0));
-    const hitPoint = voxelHit.point;
+    // Bullet leaves the actual gun tip in 3rd person
+    const muzzleWorldPos = new THREE.Vector3();
+    this.muzzleFlashMesh.getWorldPosition(muzzleWorldPos);
 
-    // Bullet tracer line
-    this.particles.createBulletTracer(muzzlePos, hitPoint, weapon.bulletSpeed);
+    const hitPoint = voxelHit.point;
+    this.particles.createBulletTracer(muzzleWorldPos, hitPoint, weapon.bulletSpeed);
 
     if (voxelHit.hit) {
       this.particles.spawnImpact(hitPoint, voxelHit.normal);
     }
 
-    // Trigger weapon firing event for AI bots check
     this.onWeaponFired(rayOrigin, lookDir, weapon);
   }
 
-  // Callback attached by BotManager
   public onWeaponFired: (origin: THREE.Vector3, dir: THREE.Vector3, weapon: WeaponConfig) => void = () => {};
 
   public applyDamage(amount: number, isHeadshot: boolean = false): void {
     let effectiveDmg = amount;
 
     if (isHeadshot) {
-      const helmetReduction = this.vitals.helmetTier * 0.15; // Tier 1: 15%, Tier 2: 30%, Tier 3: 45%
+      const helmetReduction = this.vitals.helmetTier * 0.15;
       effectiveDmg *= (1.0 - helmetReduction);
     }
 
-    // Vest absorbs 50% damage
     if (this.vitals.armor > 0) {
       const armorAbsorb = effectiveDmg * 0.5;
       if (this.vitals.armor >= armorAbsorb) {
@@ -436,6 +562,7 @@ export class PlayerController {
   public update(delta: number): void {
     this.updateAirborne(delta);
     this.updateMovement(delta);
+    this.updateAnimations(delta);
     this.updateCombat(delta);
     this.updateCamera();
   }
@@ -446,16 +573,15 @@ export class PlayerController {
     const highestGround = this.world.getHighestY(Math.floor(this.position.x), Math.floor(this.position.z)) + 1;
     this.altitude = Math.max(0, Math.round(this.position.y - highestGround));
 
-    // Auto-deploy parachute at 18m
+    // Auto deploy parachute at 18m
     if (this.altitude < 18 && !this.isParachuteOpen) {
       this.isParachuteOpen = true;
       if (this.parachuteMesh) this.parachuteMesh.visible = true;
     }
 
-    const fallSpeed = this.isParachuteOpen ? 7.0 : 25.0;
+    const fallSpeed = this.isParachuteOpen ? 6.5 : 22.0;
     this.velocity.y = -fallSpeed;
 
-    // Gliding control
     const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
     const glideSpeed = this.isParachuteOpen ? 12.0 : 6.0;
 
@@ -465,8 +591,8 @@ export class PlayerController {
     this.position.addScaledVector(this.velocity, delta);
 
     // Touchdown
-    if (this.position.y <= highestGround + 1.2) {
-      this.position.y = highestGround + 1.2;
+    if (this.position.y <= highestGround + 0.2) {
+      this.position.y = highestGround;
       this.isAirborne = false;
       this.isParachuteOpen = false;
       if (this.parachuteMesh) this.parachuteMesh.visible = false;
@@ -486,7 +612,6 @@ export class PlayerController {
       speed *= this.skills.speedMultiplier;
     }
 
-    // Direction vectors
     const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
     const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
 
@@ -503,17 +628,26 @@ export class PlayerController {
     this.velocity.x = moveDir.x * speed;
     this.velocity.z = moveDir.z * speed;
 
-    // Jump
     if (this.keys['Space'] && this.isGrounded) {
       this.velocity.y = this.jumpSpeed;
       this.isGrounded = false;
     }
 
-    // Gravity
     this.velocity.y -= this.gravity * delta;
 
-    // Voxel AABB Collision & Sliding
     this.resolveVoxelCollisions(delta);
+
+    // Absolute island boundary clamp (can NEVER fall into void!)
+    const mapLimit = 90;
+    this.position.x = Math.max(-mapLimit, Math.min(mapLimit, this.position.x));
+    this.position.z = Math.max(-mapLimit, Math.min(mapLimit, this.position.z));
+
+    const groundLimit = this.world.getHighestY(Math.floor(this.position.x), Math.floor(this.position.z));
+    if (this.position.y < groundLimit) {
+      this.position.y = groundLimit + 0.1;
+      this.velocity.y = 0;
+      this.isGrounded = true;
+    }
 
     this.playerMesh.position.copy(this.position);
     this.playerMesh.rotation.y = this.yaw;
@@ -523,7 +657,6 @@ export class PlayerController {
     const halfWidth = 0.3;
     const height = 1.8;
 
-    // X-axis movement & collision
     const nextX = this.position.x + this.velocity.x * delta;
     this.boundingBox.min.set(nextX - halfWidth, this.position.y, this.position.z - halfWidth);
     this.boundingBox.max.set(nextX + halfWidth, this.position.y + height, this.position.z + halfWidth);
@@ -531,7 +664,6 @@ export class PlayerController {
     if (!this.world.checkAABBCollision(this.boundingBox)) {
       this.position.x = nextX;
     } else {
-      // Step-assist: check if climbing 1 block is possible
       this.boundingBox.min.y += 1.05;
       this.boundingBox.max.y += 1.05;
       if (!this.world.checkAABBCollision(this.boundingBox)) {
@@ -542,7 +674,6 @@ export class PlayerController {
       }
     }
 
-    // Z-axis movement & collision
     const nextZ = this.position.z + this.velocity.z * delta;
     this.boundingBox.min.set(this.position.x - halfWidth, this.position.y, nextZ - halfWidth);
     this.boundingBox.max.set(this.position.x + halfWidth, this.position.y + height, nextZ + halfWidth);
@@ -550,7 +681,6 @@ export class PlayerController {
     if (!this.world.checkAABBCollision(this.boundingBox)) {
       this.position.z = nextZ;
     } else {
-      // Step-assist on Z
       this.boundingBox.min.y += 1.05;
       this.boundingBox.max.y += 1.05;
       if (!this.world.checkAABBCollision(this.boundingBox)) {
@@ -561,7 +691,6 @@ export class PlayerController {
       }
     }
 
-    // Y-axis movement & collision (gravity / landing)
     const nextY = this.position.y + this.velocity.y * delta;
     this.boundingBox.min.set(this.position.x - halfWidth, nextY, this.position.z - halfWidth);
     this.boundingBox.max.set(this.position.x + halfWidth, nextY + height, this.position.z + halfWidth);
@@ -575,6 +704,53 @@ export class PlayerController {
         this.position.y = Math.floor(nextY) + 1.0;
       }
       this.velocity.y = 0;
+    }
+  }
+
+  private updateAnimations(delta: number): void {
+    const isMoving = (this.velocity.x !== 0 || this.velocity.z !== 0) && this.isGrounded;
+
+    if (isMoving) {
+      const cycleSpeed = this.isSprinting ? 14 : 9;
+      this.walkCycle += delta * cycleSpeed;
+
+      // Leg swings
+      this.legLeft.rotation.x = Math.sin(this.walkCycle) * 0.65;
+      this.legRight.rotation.x = -Math.sin(this.walkCycle) * 0.65;
+
+      // Arm swing when running
+      if (!this.isADS) {
+        this.armLeft.rotation.x = -Math.sin(this.walkCycle) * 0.45;
+      }
+    } else {
+      // Idle return
+      this.legLeft.rotation.x = THREE.MathUtils.lerp(this.legLeft.rotation.x, 0, delta * 10);
+      this.legRight.rotation.x = THREE.MathUtils.lerp(this.legRight.rotation.x, 0, delta * 10);
+      this.armLeft.rotation.x = THREE.MathUtils.lerp(this.armLeft.rotation.x, 0, delta * 10);
+    }
+
+    // Spine and head pitch tilt
+    this.torsoGroup.rotation.x = this.pitch * 0.55;
+
+    // Pickaxe swing
+    if (this.pickaxeSwingTimer > 0) {
+      this.pickaxeSwingTimer -= delta;
+      this.armRight.rotation.x = -0.8 + Math.sin(this.pickaxeSwingTimer * 20) * 0.9;
+    } else {
+      // Weapon holding pose: aiming forward
+      const targetArmX = -0.25 - this.pitch * 0.4;
+      this.armRight.rotation.x = THREE.MathUtils.lerp(this.armRight.rotation.x, targetArmX, delta * 15);
+    }
+
+    // Arm recoil recovery
+    this.armRight.position.z = THREE.MathUtils.lerp(this.armRight.position.z, 0, delta * 18);
+
+    // Muzzle flash fade
+    if (this.muzzleFlashTimer > 0) {
+      this.muzzleFlashTimer -= delta;
+      if (this.muzzleFlashTimer <= 0) {
+        (this.muzzleFlashMesh.material as THREE.MeshBasicMaterial).opacity = 0;
+      }
     }
   }
 
@@ -598,7 +774,6 @@ export class PlayerController {
       }
     }
 
-    // Continuous fire for automatic weapons
     const activeWeapon = this.getActiveWeapon();
     if (this.isMouseDown && activeWeapon && activeWeapon.isAutomatic && !this.isAirborne) {
       this.performAction();
@@ -612,10 +787,7 @@ export class PlayerController {
     const finalPitch = this.pitch + this.recoil.currentRecoilPitch;
     const finalYaw = this.yaw + this.recoil.currentRecoilYaw;
 
-    this.headMesh.rotation.x = finalPitch;
-
     if (!this.isThirdPerson) {
-      // 1st Person: Camera right at eye level
       this.camera.position.set(
         this.position.x,
         this.position.y + 1.55,
@@ -624,17 +796,21 @@ export class PlayerController {
       this.camera.rotation.set(finalPitch, finalYaw, 0, 'YXZ');
       this.playerMesh.visible = false;
     } else {
-      // 3rd Person: PUBG/Free Fire over-the-shoulder camera
       this.playerMesh.visible = true;
-      const shoulderOffset = new THREE.Vector3(0.65, 1.6, 2.5);
-      shoulderOffset.applyAxisAngle(new THREE.Vector3(1, 0, 0), finalPitch);
-      shoulderOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), finalYaw);
 
-      this.camera.position.copy(this.position).add(shoulderOffset);
+      // Dynamic Third-Person Camera (Over the Shoulder PUBG/Free Fire view)
+      const shoulderX = this.isADS ? 0.45 : 0.65;
+      const camDist = this.isADS ? 1.6 : 2.8;
+      const camHeight = 1.65;
+
+      const offset = new THREE.Vector3(shoulderX, camHeight, camDist);
+      offset.applyAxisAngle(new THREE.Vector3(1, 0, 0), finalPitch * 0.7);
+      offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), finalYaw);
+
+      this.camera.position.copy(this.position).add(offset);
       this.camera.rotation.set(finalPitch, finalYaw, 0, 'YXZ');
     }
 
-    // Field of view for ADS Zoom
     const targetFOV = this.isADS ? 40 : 75;
     this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.2);
     this.camera.updateProjectionMatrix();
