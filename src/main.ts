@@ -13,6 +13,7 @@ import { BotManager } from './ai/BotManager';
 import { UIManager } from './ui/UIManager';
 import { RoomManager } from './network/RoomManager';
 import { RemotePlayerManager } from './network/RemotePlayerManager';
+import { WEAPON_REGISTRY } from './combat/WeaponTypes';
 
 class GameApp {
   private canvas: HTMLCanvasElement;
@@ -133,7 +134,13 @@ class GameApp {
     };
 
     // 8. Initialize UI Overlay & Room Handlers
-    this.uiManager = new UIManager(this.player, this.zoneManager, this.botManager);
+    this.uiManager = new UIManager(
+      this.player,
+      this.zoneManager,
+      this.botManager,
+      this.remotePlayerManager,
+      this.roomManager
+    );
     this.setupRoomHandlers();
 
     // 9. Setup DOM & Window Events
@@ -469,6 +476,18 @@ class GameApp {
     this.player.isThirdPerson = true;
     this.player.vitals.health = 100;
     this.player.vitals.armor = 100;
+    this.player.vitals.glooCount = 5;
+
+    // Reset weapons and guarantee loaded M416 in Slot 0
+    this.player.inventory = [
+      { weapon: WEAPON_REGISTRY.m416, currentAmmo: 30, reserveAmmo: 180 },
+      { weapon: WEAPON_REGISTRY.awm, currentAmmo: 5, reserveAmmo: 25 },
+      { weapon: WEAPON_REGISTRY.pickaxe, currentAmmo: 0, reserveAmmo: 0 },
+      { weapon: WEAPON_REGISTRY.frag_grenade, currentAmmo: 4, reserveAmmo: 0 },
+      { weapon: WEAPON_REGISTRY.gloo_wall, currentAmmo: 5, reserveAmmo: 0 },
+      { weapon: WEAPON_REGISTRY.medkit, currentAmmo: 3, reserveAmmo: 0 }
+    ];
+    this.player.selectSlot(0);
 
     this.gameState = GameState.AIRBORNE;
     this.matchStartTime = Date.now();

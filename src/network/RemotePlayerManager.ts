@@ -30,7 +30,9 @@ export class RemotePlayer {
   public leftLeg: THREE.Mesh;
   public rightLeg: THREE.Mesh;
   public gunMesh: THREE.Mesh;
+  public torsoMesh: THREE.Mesh;
   public nameSprite: THREE.Sprite;
+  public bodyParts: THREE.Mesh[] = [];
 
   public position: THREE.Vector3 = new THREE.Vector3();
   public targetPosition: THREE.Vector3 = new THREE.Vector3();
@@ -42,6 +44,12 @@ export class RemotePlayer {
   public currentWeapon: WeaponConfig = WEAPON_REGISTRY.m416;
 
   private animTimer: number = 0;
+  private hitFlashTimer: number = 0;
+  private flinchAmount: number = 0;
+
+  private spriteCanvas: HTMLCanvasElement;
+  private spriteCtx: CanvasRenderingContext2D;
+  private spriteTexture: THREE.CanvasTexture;
 
   constructor(slotId: number, name: string, team: 'blue' | 'red') {
     this.slotId = slotId;
@@ -58,76 +66,169 @@ export class RemotePlayer {
 
     // Torso
     const torsoGeo = new THREE.BoxGeometry(0.55, 0.75, 0.3);
-    const torso = new THREE.Mesh(torsoGeo, vestMat);
-    torso.position.y = 0.9;
-    this.mesh.add(torso);
+    this.torsoMesh = new THREE.Mesh(torsoGeo, vestMat);
+    this.torsoMesh.position.y = 0.9;
+    this.mesh.add(this.torsoMesh);
+    this.bodyParts.push(this.torsoMesh);
 
     // Team band
     const bandGeo = new THREE.BoxGeometry(0.57, 0.2, 0.32);
     const band = new THREE.Mesh(bandGeo, bodyMat);
     band.position.y = 0.9;
     this.mesh.add(band);
+    this.bodyParts.push(band);
 
     // Head
     const headGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
     this.headMesh = new THREE.Mesh(headGeo, skinMat);
     this.headMesh.position.y = 1.45;
     this.mesh.add(this.headMesh);
+    this.bodyParts.push(this.headMesh);
 
     // Arms
     const armGeo = new THREE.BoxGeometry(0.18, 0.65, 0.18);
     this.leftArm = new THREE.Mesh(armGeo, skinMat);
     this.leftArm.position.set(-0.38, 0.9, 0);
     this.mesh.add(this.leftArm);
+    this.bodyParts.push(this.leftArm);
 
     this.rightArm = new THREE.Mesh(armGeo, skinMat);
     this.rightArm.position.set(0.38, 0.9, 0);
     this.mesh.add(this.rightArm);
+    this.bodyParts.push(this.rightArm);
 
     // Legs
     const legGeo = new THREE.BoxGeometry(0.2, 0.7, 0.2);
     this.leftLeg = new THREE.Mesh(legGeo, vestMat);
     this.leftLeg.position.set(-0.16, 0.35, 0);
     this.mesh.add(this.leftLeg);
+    this.bodyParts.push(this.leftLeg);
 
     this.rightLeg = new THREE.Mesh(legGeo, vestMat);
     this.rightLeg.position.set(0.16, 0.35, 0);
     this.mesh.add(this.rightLeg);
+    this.bodyParts.push(this.rightLeg);
 
     // Gun
     const gunGeo = new THREE.BoxGeometry(0.1, 0.12, 0.6);
     this.gunMesh = new THREE.Mesh(gunGeo, gunMat);
     this.gunMesh.position.set(0.3, 0.85, 0.35);
     this.mesh.add(this.gunMesh);
+    this.bodyParts.push(this.gunMesh);
 
-    // 3D Name Tag Canvas
-    this.nameSprite = this.createNameSprite(name, team);
-    this.nameSprite.position.y = 1.95;
+    // 3D Name Tag & Dynamic Health Bar Canvas
+    this.spriteCanvas = document.createElement('canvas');
+    this.spriteCanvas.width = 320;
+    this.spriteCanvas.height = 110;
+    this.spriteCtx = this.spriteCanvas.getContext('2d')!;
+
+    this.spriteTexture = new THREE.CanvasTexture(this.spriteCanvas);
+    const spriteMat = new THREE.SpriteMaterial({ map: this.spriteTexture, transparent: true });
+    this.nameSprite = new THREE.Sprite(spriteMat);
+    this.nameSprite.scale.set(2.2, 0.75, 1);
+    this.nameSprite.position.y = 2.25;
     this.mesh.add(this.nameSprite);
+
+    this.updateNameAndHealthSprite();
   }
 
-  private createNameSprite(name: string, team: 'blue' | 'red'): THREE.Sprite {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.roundRect(10, 10, 236, 44, 8);
-      ctx.fill();
+  public updateNameAndHealthSprite(): void {
+    const ctx = this.spriteCtx;
+    if (!ctx) return;
 
-      ctx.fillStyle = team === 'blue' ? '#38bdf8' : '#fb923c';
-      ctx.font = 'bold 22px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(name, 128, 32);
+    const w = 320;
+    const h = 110;
+    ctx.clearRect(0, 0, w, h);
+
+    // 1. Dark glowing background container
+    ctx.fillStyle = 'rgba(10, 15, 26, 0.88)';
+    ctx.strokeStyle = this.team === 'blue' ? 'rgba(56, 189, 248, 0.85)' : 'rgba(249, 115, 22, 0.85)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(8, 8, w - 16, h - 16, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    // 2. Team Badge & Name
+    ctx.fillStyle = this.team === 'blue' ? '#38bdf8' : '#fb923c';
+    ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const tag = this.team === 'blue' ? '[BLUE]' : '[RED]';
+    ctx.fillText(`${tag} ${this.name}`, w / 2, 16);
+
+    // 3. Health Bar Background Track
+    const barX = 24;
+    const barY = 46;
+    const barW = w - 48;
+    const barH = 18;
+
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 6);
+    ctx.fill();
+
+    // 4. Health Bar Fill
+    const hpRatio = Math.max(0, Math.min(1, this.health / this.maxHealth));
+    const currentBarW = Math.max(this.health > 0 ? 6 : 0, barW * hpRatio);
+
+    if (hpRatio > 0.5) {
+      ctx.fillStyle = '#22c55e'; // Green
+    } else if (hpRatio > 0.25) {
+      ctx.fillStyle = '#f59e0b'; // Amber / Yellow
+    } else {
+      ctx.fillStyle = '#ef4444'; // Red
     }
 
-    const texture = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(1.5, 0.375, 1);
-    return sprite;
+    if (currentBarW > 0) {
+      ctx.beginPath();
+      ctx.roundRect(barX, barY, currentBarW, barH, 6);
+      ctx.fill();
+    }
+
+    // 5. HP Text inside bar
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 4;
+    ctx.fillText(`HP ${Math.ceil(this.health)} / ${this.maxHealth}`, w / 2, barY + barH / 2);
+    ctx.shadowBlur = 0;
+
+    // 6. Armor Bar (if any armor remaining)
+    if (this.armor > 0) {
+      const armY = 72;
+      const armH = 8;
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.roundRect(barX, armY, barW, armH, 4);
+      ctx.fill();
+
+      const armRatio = Math.max(0, Math.min(1, this.armor / 100));
+      ctx.fillStyle = '#00d2ff';
+      ctx.beginPath();
+      ctx.roundRect(barX, armY, barW * armRatio, armH, 4);
+      ctx.fill();
+    }
+
+    this.spriteTexture.needsUpdate = true;
+  }
+
+  public takeHit(dmg: number, isHeadshot: boolean): void {
+    this.health = Math.max(0, this.health - dmg);
+    this.hitFlashTimer = 0.18;
+    this.flinchAmount = 0.25;
+
+    // Flash body parts red
+    for (const part of this.bodyParts) {
+      const mat = part.material as THREE.MeshLambertMaterial;
+      if (mat && mat.emissive) {
+        mat.emissive.setHex(0xff0000);
+      }
+    }
+
+    this.updateNameAndHealthSprite();
   }
 
   public update(delta: number): void {
@@ -138,7 +239,7 @@ export class RemotePlayer {
     this.mesh.visible = true;
 
     // Smooth position interpolation
-    this.position.lerp(this.targetPosition, 0.3);
+    this.position.lerp(this.targetPosition, 0.35);
     this.mesh.position.copy(this.position);
 
     // Smooth rotation interpolation
@@ -146,6 +247,27 @@ export class RemotePlayer {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     this.mesh.rotation.y += diff * 0.25;
+
+    // Hit flash timer countdown
+    if (this.hitFlashTimer > 0) {
+      this.hitFlashTimer -= delta;
+      if (this.hitFlashTimer <= 0) {
+        for (const part of this.bodyParts) {
+          const mat = part.material as THREE.MeshLambertMaterial;
+          if (mat && mat.emissive) {
+            mat.emissive.setHex(0x000000);
+          }
+        }
+      }
+    }
+
+    // Flinch reaction decay
+    if (this.flinchAmount > 0) {
+      this.flinchAmount = THREE.MathUtils.lerp(this.flinchAmount, 0, delta * 8);
+      this.torsoMesh.rotation.x = -this.flinchAmount;
+    } else {
+      this.torsoMesh.rotation.x = 0;
+    }
 
     // Walking animation if moving
     const isMoving = this.position.distanceTo(this.targetPosition) > 0.05;
@@ -232,9 +354,15 @@ export class RemotePlayerManager {
       const peer = this.getOrCreatePeer(state.slotId, state.name || 'Friend (Online)', state.team);
       peer.targetPosition.set(state.position.x, state.position.y, state.position.z);
       peer.targetRotationY = state.rotationY;
+
+      const hpChanged = (peer.health !== state.health || peer.armor !== state.armor || peer.isAlive !== state.isAlive);
       peer.health = state.health;
       peer.armor = state.armor;
       peer.isAlive = state.isAlive;
+
+      if (hpChanged) {
+        peer.updateNameAndHealthSprite();
+      }
 
       if (state.isShooting) {
         this.sound.playGunshot('rifle');
@@ -247,13 +375,25 @@ export class RemotePlayerManager {
       // Check if this damage event was targeted at the local player
       if (data.targetSlot === this.roomManager.localPlayerSlot && this.localPlayer) {
         this.localPlayer.applyDamage(data.damage, data.isHeadshot);
-        this.sound.playHitmarker(false);
+
+        // If damage proved fatal to local player, broadcast elimination
+        if (this.localPlayer.vitals.health <= 0) {
+          const myTeam = this.roomManager.isHost ? 'blue' : this.roomManager.preferredTeam;
+          const enemyTeam = myTeam === 'blue' ? 'red' : 'blue';
+          this.roomManager.sendNetworkMessage({
+            type: 'PLAYER_ELIMINATED',
+            slotId: this.roomManager.localPlayerSlot,
+            killerTeam: enemyTeam
+          });
+        }
       }
     } else if (data.type === 'PLAYER_ELIMINATED') {
       const peer = this.peers.get(data.slotId);
       if (peer) {
         peer.isAlive = false;
         peer.mesh.visible = false;
+        peer.health = 0;
+        peer.updateNameAndHealthSprite();
       }
       this.roomManager.registerKill(data.killerTeam);
     }
@@ -297,7 +437,7 @@ export class RemotePlayerManager {
   }
 
   /**
-   * Raycasts local player bullet against remote peers
+   * Raycasts local player bullet against remote peers with generous hitbox
    */
   public checkHitAgainstPeers(
     origin: THREE.Vector3,
@@ -311,13 +451,15 @@ export class RemotePlayerManager {
     let closestPeer: RemotePlayer | null = null;
     let closestDist: number = weapon.range;
     let isHeadshot: boolean = false;
+    let hitLocation: THREE.Vector3 = new THREE.Vector3();
 
     for (const [, peer] of this.peers) {
       if (!peer.isAlive || peer.team === myTeam) continue; // No friendly fire
 
+      // Generous hitbox padding to ensure reliable hit registration with network jitter
       const box = new THREE.Box3(
-        peer.position.clone().add(new THREE.Vector3(-0.4, 0, -0.4)),
-        peer.position.clone().add(new THREE.Vector3(0.4, 1.8, 0.4))
+        peer.position.clone().add(new THREE.Vector3(-0.65, -0.2, -0.65)),
+        peer.position.clone().add(new THREE.Vector3(0.65, 2.1, 0.65))
       );
 
       const hitPoint = new THREE.Vector3();
@@ -326,39 +468,56 @@ export class RemotePlayerManager {
         if (dist < closestDist) {
           closestDist = dist;
           closestPeer = peer;
+          hitLocation.copy(hitPoint);
           isHeadshot = (hitPoint.y - peer.position.y) >= 1.35;
         }
       }
     }
 
     if (closestPeer) {
+      // 1. Play hitmarker sound
       this.sound.playHitmarker(isHeadshot);
 
+      // 2. 2D HUD Crosshair Hitmarker
       const hmEl = document.getElementById('hitmarker');
       if (hmEl) {
         hmEl.className = `hitmarker active ${isHeadshot ? 'headshot' : ''}`;
-        setTimeout(() => { hmEl.className = 'hitmarker hidden'; }, 120);
+        setTimeout(() => { hmEl.className = 'hitmarker hidden'; }, 140);
       }
 
+      // 3. Blood splatter particles at exact impact point
+      this.particles.spawnBlood(hitLocation);
+
+      // 4. Calculate damage
       const multiplier = isHeadshot ? weapon.headshotMultiplier : 1.0;
       const dmg = weapon.damage * multiplier;
 
+      // 5. Remote peer mesh damage reaction: red flash + flinch + overhead health bar update
+      closestPeer.takeHit(dmg, isHeadshot);
+
+      // 6. Floating 3D damage numbers
       this.particles.spawnDamageNumber(
         dmg,
-        closestPeer.position.clone().add(new THREE.Vector3(0, 1.5, 0)),
+        closestPeer.position.clone().add(new THREE.Vector3(0, 1.8, 0)),
         localPlayer.camera,
         isHeadshot
       );
 
-      // Send damage event to remote player
-      closestPeer.health -= dmg;
+      // 7. Check if fatal
       if (closestPeer.health <= 0) {
         closestPeer.isAlive = false;
         closestPeer.mesh.visible = false;
         const myTeam = this.roomManager.isHost ? 'blue' : this.roomManager.preferredTeam;
         this.roomManager.registerKill(myTeam);
+
+        this.roomManager.sendNetworkMessage({
+          type: 'PLAYER_ELIMINATED',
+          slotId: closestPeer.slotId,
+          killerTeam: myTeam
+        });
       }
 
+      // 8. Send damage event to remote player
       this.roomManager.sendNetworkMessage({
         type: 'DAMAGE_EVENT',
         targetSlot: closestPeer.slotId,

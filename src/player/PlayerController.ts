@@ -613,6 +613,22 @@ export class PlayerController {
     }
 
     this.vitals.health = Math.max(0, this.vitals.health - effectiveDmg);
+
+    // Audio & screen damage feedback
+    this.sound.playPlayerHurt();
+
+    const vig = document.getElementById('damage-vignette');
+    if (vig) {
+      vig.classList.remove('hidden');
+      vig.classList.add('active');
+      setTimeout(() => {
+        vig.classList.remove('active');
+      }, 250);
+    }
+
+    // Flinch / camera impulse
+    this.pitch += (Math.random() - 0.5) * 0.035;
+    this.yaw += (Math.random() - 0.5) * 0.035;
   }
 
   public update(delta: number): void {

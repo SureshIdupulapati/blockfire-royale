@@ -380,7 +380,7 @@ export class RoomManager {
       this.onRoomUpdated(this.currentRoom!);
     } else if (data.type === 'START_MATCH') {
       this.onStartMatch(data.mode);
-    } else if (data.type === 'PLAYER_STATE') {
+    } else if (data.type === 'PLAYER_STATE' || data.type === 'DAMAGE_EVENT' || data.type === 'PLAYER_ELIMINATED') {
       this.onRemotePlayerUpdate(data);
     } else if (data.type === 'SCORE_UPDATE') {
       this.teamBlueScore = data.payload.blue;

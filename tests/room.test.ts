@@ -78,5 +78,30 @@ describe('Custom Room & 1v1 / 2v2 Modes', () => {
     expect(link).toContain('github.io');
     expect(link).toContain(room.roomId);
   });
+
+  it('should route DAMAGE_EVENT and PLAYER_ELIMINATED through onRemotePlayerUpdate', () => {
+    const manager = new RoomManager();
+    const receivedMessages: any[] = [];
+    manager.onRemotePlayerUpdate = (data) => receivedMessages.push(data);
+
+    // Simulate incoming messages via handleNetworkMessage
+    (manager as any).handleNetworkMessage({
+      type: 'DAMAGE_EVENT',
+      targetSlot: 1,
+      damage: 32,
+      isHeadshot: false
+    });
+
+    (manager as any).handleNetworkMessage({
+      type: 'PLAYER_ELIMINATED',
+      slotId: 1,
+      killerTeam: 'blue'
+    });
+
+    expect(receivedMessages.length).toBe(2);
+    expect(receivedMessages[0].type).toBe('DAMAGE_EVENT');
+    expect(receivedMessages[0].damage).toBe(32);
+    expect(receivedMessages[1].type).toBe('PLAYER_ELIMINATED');
+  });
 });
 

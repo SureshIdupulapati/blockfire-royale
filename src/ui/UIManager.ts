@@ -2,12 +2,16 @@ import * as THREE from 'three';
 import { PlayerController } from '../player/PlayerController';
 import { ZoneManager } from '../zone/ZoneManager';
 import { BotManager } from '../ai/BotManager';
+import { RemotePlayerManager } from '../network/RemotePlayerManager';
+import { RoomManager } from '../network/RoomManager';
 import { KillFeedEvent } from '../types';
 
 export class UIManager {
   private player: PlayerController;
   private zoneManager: ZoneManager;
   private botManager: BotManager;
+  private remotePlayerManager: RemotePlayerManager | null = null;
+  private roomManager: RoomManager | null = null;
 
   // DOM Elements
   private compassStrip: HTMLElement | null;
@@ -44,10 +48,18 @@ export class UIManager {
   private booyahScreen: HTMLElement | null;
   private defeatScreen: HTMLElement | null;
 
-  constructor(player: PlayerController, zoneManager: ZoneManager, botManager: BotManager) {
+  constructor(
+    player: PlayerController,
+    zoneManager: ZoneManager,
+    botManager: BotManager,
+    remotePlayerManager?: RemotePlayerManager,
+    roomManager?: RoomManager
+  ) {
     this.player = player;
     this.zoneManager = zoneManager;
     this.botManager = botManager;
+    this.remotePlayerManager = remotePlayerManager || null;
+    this.roomManager = roomManager || null;
 
     this.compassStrip = document.getElementById('compass-strip');
     this.compassDegree = document.getElementById('compass-degree');
@@ -84,6 +96,11 @@ export class UIManager {
 
     this.initCompass();
     this.setupBotListeners();
+  }
+
+  public setNetworkManagers(rpm: RemotePlayerManager, rm: RoomManager): void {
+    this.remotePlayerManager = rpm;
+    this.roomManager = rm;
   }
 
   private initCompass(): void {
@@ -314,9 +331,77 @@ export class UIManager {
 
       if (bx >= 0 && bx <= w && bz >= 0 && bz <= h) {
         ctx.beginPath();
-        ctx.arc(bx, bz, 3, 0, Math.PI * 2);
+        ctx.arc(bx, bz, 3.5, 0, Math.PI * 2);
         ctx.fillStyle = '#ff4500';
         ctx.fill();
+      }
+    }
+
+    // 3b. Draw Remote Human Players (Opponents & Squad Mates)
+    if (this.remotePlayerManager && this.remotePlayerManager.peers.size > 0) {
+      const myTeam = this.roomManager?.isHost ? 'blue' : (this.roomManager?.preferredTeam || 'blue');
+      const maxRadarRadius = (w / 2) - 8;
+
+      for (const [, peer] of this.remotePlayerManager.peers) {
+        if (!peer.isAlive) continue;
+
+        const isEnemy = peer.team !== myTeam;
+        const dx = (peer.position.x - px) * scale;
+        const dz = (peer.position.z - pz) * scale;
+        const dist = Math.hypot(dx, dz);
+
+        let drawX = centerX + dx;
+        let drawY = centerY + dz;
+        const isClamped = dist > maxRadarRadius;
+
+        if (isClamped) {
+          // Clamp to radar perimeter with directional angle
+          const angle = Math.atan2(dz, dx);
+          drawX = centerX + Math.cos(angle) * maxRadarRadius;
+          drawY = centerY + Math.sin(angle) * maxRadarRadius;
+        }
+
+        ctx.save();
+        if (isEnemy) {
+          const pulse = (Math.sin(Date.now() * 0.009) + 1) * 0.5;
+
+          // Outer glowing warning halo
+          ctx.beginPath();
+          ctx.arc(drawX, drawY, 6 + pulse * 3.5, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 + pulse * 0.45})`;
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+
+          // Center solid red dot
+          ctx.beginPath();
+          ctx.arc(drawX, drawY, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#ef4444';
+          ctx.fill();
+
+          // If clamped to edge, draw outward pointer triangle so player knows opponent location
+          if (isClamped) {
+            const angle = Math.atan2(dz, dx);
+            ctx.translate(drawX, drawY);
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.moveTo(6, 0);
+            ctx.lineTo(-3, -3.5);
+            ctx.lineTo(-3, 3.5);
+            ctx.closePath();
+            ctx.fillStyle = '#ff2222';
+            ctx.fill();
+          }
+        } else {
+          // Friendly teammate: cyan blip with white ring
+          ctx.beginPath();
+          ctx.arc(drawX, drawY, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#00d2ff';
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        ctx.restore();
       }
     }
 

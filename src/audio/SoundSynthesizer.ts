@@ -380,5 +380,29 @@ export class SoundSynthesizer {
     osc.start(now);
     osc.stop(now + 0.65);
   }
+
+  /**
+   * Player hurt / bullet impact impact sound
+   */
+  public playPlayerHurt(): void {
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    this.resume();
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.exponentialRampToValueAtTime(45, now + 0.18);
+
+    gain.gain.setValueAtTime(0.55, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  }
 }
 
